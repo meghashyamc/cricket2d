@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	screenWidth  = 800
-	screenHeight = 600
+	screenWidth  = 1200
+	screenHeight = 800
 
 	ballSpawnTime = 2 * time.Second
 )
@@ -184,6 +184,9 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 		ball.Draw(screen)
 	}
 
+	// Draw collision rectangles for debugging
+	g.drawCollisionRectangles(screen)
+
 	// Draw current score
 	scoreText := fmt.Sprintf("Score: %d", g.score)
 	op := &text.DrawOptions{}
@@ -271,7 +274,7 @@ func (g *Game) drawNameInput(screen *ebiten.Image) {
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	return 800, 600
+	return 1200, 800
 }
 
 func (g *Game) Reset() {
@@ -284,6 +287,54 @@ func (g *Game) Reset() {
 	g.gameOverMessage = ""
 	g.nameInput = ""
 	g.isNewHighScore = false
+}
+
+func (g *Game) drawCollisionRectangles(screen *ebiten.Image) {
+	// Draw bat collision rectangle in red
+	batRect := g.batsman.Collider()
+	g.drawRectangleOutline(screen, batRect, color.RGBA{255, 0, 0, 255}) // Red
+
+	// Draw ball collision rectangles in green
+	for _, ball := range g.balls {
+		if ball.IsActive() {
+			ballRect := ball.Collider()
+			g.drawRectangleOutline(screen, ballRect, color.RGBA{0, 255, 0, 255}) // Green
+		}
+	}
+
+	// Draw stumps collision rectangle in blue
+	stumpsRect := g.stumps.Collider()
+	g.drawRectangleOutline(screen, stumpsRect, color.RGBA{0, 0, 255, 255}) // Blue
+}
+
+func (g *Game) drawRectangleOutline(screen *ebiten.Image, rect Rect, col color.Color) {
+	// Create a 1-pixel white image to draw lines with
+	lineImg := ebiten.NewImage(1, 1)
+	lineImg.Fill(col)
+
+	// Draw top line
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Scale(rect.Width, 1)
+	op.GeoM.Translate(rect.X, rect.Y)
+	screen.DrawImage(lineImg, op)
+
+	// Draw bottom line
+	op = &ebiten.DrawImageOptions{}
+	op.GeoM.Scale(rect.Width, 1)
+	op.GeoM.Translate(rect.X, rect.Y+rect.Height-1)
+	screen.DrawImage(lineImg, op)
+
+	// Draw left line
+	op = &ebiten.DrawImageOptions{}
+	op.GeoM.Scale(1, rect.Height)
+	op.GeoM.Translate(rect.X, rect.Y)
+	screen.DrawImage(lineImg, op)
+
+	// Draw right line
+	op = &ebiten.DrawImageOptions{}
+	op.GeoM.Scale(1, rect.Height)
+	op.GeoM.Translate(rect.X+rect.Width-1, rect.Y)
+	screen.DrawImage(lineImg, op)
 }
 
 func min(a, b float64) float64 {

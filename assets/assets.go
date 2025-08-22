@@ -12,15 +12,11 @@ import (
 )
 
 var (
-	PitchSprite  *ebiten.Image
 	BallSprite   *ebiten.Image
 	BatSprite    *ebiten.Image
 	StumpsSprite *ebiten.Image
 	ScoreFont    *text.GoTextFace
 )
-
-//go:embed pitch.png
-var pitchPNG []byte
 
 //go:embed ball.png
 var ballPNG []byte
@@ -32,7 +28,6 @@ var batPNG []byte
 var stumpsPNG []byte
 
 func init() {
-	PitchSprite = loadPNG(pitchPNG)
 	BallSprite = scaleImage(loadPNG(ballPNG), 0.7) // Make ball smaller (70% of original)
 	BatSprite = scaleImage(loadPNG(batPNG), 1.3)   // Make bat bigger (130% of original)
 	StumpsSprite = loadPNG(stumpsPNG)
