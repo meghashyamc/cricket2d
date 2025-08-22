@@ -1,0 +1,294 @@
+package game
+
+import (
+	"fmt"
+	"image/color"
+	"strings"
+	"time"
+	"unicode"
+
+	"github.com/meghashyamc/cricket2d/logger"
+
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
+	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/meghashyamc/cricket2d/assets"
+)
+
+const (
+	screenWidth  = 800
+	screenHeight = 600
+
+	ballSpawnTime = 2 * time.Second
+)
+
+type GameState int
+
+const (
+	GameStatePlaying GameState = iota
+	GameStateGameOver
+	GameStateNameInput
+)
+
+type Game struct {
+	batsman          *Batsman
+	balls            []*Ball
+	stumps           *Stumps
+	ballSpawnTimer   *Timer
+	score            int
+	state            GameState
+	gameOverMessage  string
+	highScoreManager *HighScoreManager
+	nameInput        string
+	isNewHighScore   bool
+	Logger           logger.Logger
+}
+
+func NewGame() *Game {
+	return &Game{
+		batsman:          NewBatsman(),
+		balls:            make([]*Ball, 0),
+		stumps:           NewStumps(),
+		ballSpawnTimer:   NewTimer(ballSpawnTime),
+		score:            0,
+		state:            GameStatePlaying,
+		highScoreManager: NewHighScoreManager(),
+		nameInput:        "",
+		isNewHighScore:   false,
+		Logger:           logger.New(),
+	}
+}
+
+func (g *Game) Update() error {
+	switch g.state {
+	case GameStatePlaying:
+		return g.updatePlaying()
+	case GameStateGameOver:
+		return g.updateGameOver()
+	case GameStateNameInput:
+		return g.updateNameInput()
+	}
+	return nil
+}
+
+func (g *Game) updatePlaying() error {
+	g.batsman.Update()
+
+	// Spawn new balls
+	g.ballSpawnTimer.Update()
+	if g.ballSpawnTimer.IsReady() {
+		g.ballSpawnTimer.Reset()
+		g.balls = append(g.balls, NewBall())
+	}
+
+	// Update balls
+	for i := len(g.balls) - 1; i >= 0; i-- {
+		ball := g.balls[i]
+		ball.Update()
+
+		if !ball.IsActive() {
+			// Remove inactive balls
+			g.balls = append(g.balls[:i], g.balls[i+1:]...)
+			continue
+		}
+
+		// Check collision with batsman using precise collision detection
+		if g.batsman.CheckBallCollision(ball) {
+			ball.Hit(g.batsman.GetBatAngle(), g.batsman.GetSwingVelocity())
+			g.score++
+			continue
+		}
+
+		// Check collision with stumps
+		if g.stumps.CheckCollision(ball) {
+			g.stumps.Fall()
+			g.endGame("BOWLED OUT!")
+			break
+		}
+	}
+
+	return nil
+}
+
+func (g *Game) updateGameOver() error {
+	if ebiten.IsKeyPressed(ebiten.KeyR) {
+		g.Reset()
+	}
+	return nil
+}
+
+func (g *Game) updateNameInput() error {
+	// Handle text input for name
+	g.nameInput += string(ebiten.AppendInputChars(nil))
+
+	// Handle backspace
+	if inpututil.IsKeyJustPressed(ebiten.KeyBackspace) && len(g.nameInput) > 0 {
+		g.nameInput = g.nameInput[:len(g.nameInput)-1]
+	}
+
+	// Handle enter to submit name
+	if inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
+		if g.nameInput == "" {
+			g.nameInput = "Anonymous"
+		}
+		// Clean the name (remove non-printable characters)
+		cleanName := strings.Map(func(r rune) rune {
+			if unicode.IsPrint(r) {
+				return r
+			}
+			return -1
+		}, g.nameInput)
+
+		g.highScoreManager.SetHighScore(g.score, cleanName)
+		g.state = GameStateGameOver
+		g.isNewHighScore = false
+		g.nameInput = ""
+	}
+
+	return nil
+}
+
+func (g *Game) endGame(message string) {
+	g.gameOverMessage = message
+	if g.highScoreManager.IsNewHighScore(g.score) {
+		g.isNewHighScore = true
+		g.state = GameStateNameInput
+	} else {
+		g.state = GameStateGameOver
+	}
+}
+
+func (g *Game) Draw(screen *ebiten.Image) {
+	// Clear screen with black background (terminal-like)
+	screen.Fill(color.RGBA{0, 0, 0, 255})
+
+	switch g.state {
+	case GameStatePlaying:
+		g.drawPlaying(screen)
+	case GameStateGameOver:
+		g.drawGameOver(screen)
+	case GameStateNameInput:
+		g.drawNameInput(screen)
+	}
+}
+
+func (g *Game) drawPlaying(screen *ebiten.Image) {
+	// Draw stumps
+	g.stumps.Draw(screen)
+
+	// Draw batsman
+	g.batsman.Draw(screen)
+
+	// Draw balls
+	for _, ball := range g.balls {
+		ball.Draw(screen)
+	}
+
+	// Draw current score
+	scoreText := fmt.Sprintf("Score: %d", g.score)
+	op := &text.DrawOptions{}
+	op.GeoM.Translate(20, 30)
+	op.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, scoreText, assets.ScoreFont, op)
+
+	// Draw high score
+	highScoreText := g.highScoreManager.GetHighScoreText()
+	op2 := &text.DrawOptions{}
+	op2.GeoM.Translate(20, 60)
+	op2.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, highScoreText, assets.ScoreFont, op2)
+
+	// Draw instructions
+	instructionText := "Move mouse to swing bat"
+	op3 := &text.DrawOptions{}
+	op3.GeoM.Translate(20, screenHeight-30)
+	op3.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, instructionText, assets.ScoreFont, op3)
+}
+
+func (g *Game) drawGameOver(screen *ebiten.Image) {
+	// Draw final score and game over message
+	gameOverText := g.gameOverMessage
+	op := &text.DrawOptions{}
+	op.GeoM.Translate(screenWidth/2-100, screenHeight/2-60)
+	op.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, gameOverText, assets.ScoreFont, op)
+
+	scoreText := fmt.Sprintf("Final Score: %d", g.score)
+	op2 := &text.DrawOptions{}
+	op2.GeoM.Translate(screenWidth/2-100, screenHeight/2-20)
+	op2.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, scoreText, assets.ScoreFont, op2)
+
+	// Draw high score
+	highScoreText := g.highScoreManager.GetHighScoreText()
+	op4 := &text.DrawOptions{}
+	op4.GeoM.Translate(screenWidth/2-100, screenHeight/2+10)
+	op4.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, highScoreText, assets.ScoreFont, op4)
+
+	restartText := "Press R to restart"
+	op3 := &text.DrawOptions{}
+	op3.GeoM.Translate(screenWidth/2-80, screenHeight/2+50)
+	op3.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, restartText, assets.ScoreFont, op3)
+}
+
+func (g *Game) drawNameInput(screen *ebiten.Image) {
+	// Draw congratulations message
+	congratsText := "NEW HIGH SCORE!"
+	op := &text.DrawOptions{}
+	op.GeoM.Translate(screenWidth/2-120, screenHeight/2-80)
+	op.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, congratsText, assets.ScoreFont, op)
+
+	scoreText := fmt.Sprintf("Score: %d", g.score)
+	op2 := &text.DrawOptions{}
+	op2.GeoM.Translate(screenWidth/2-60, screenHeight/2-40)
+	op2.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, scoreText, assets.ScoreFont, op2)
+
+	// Draw name input prompt
+	promptText := "Enter your name:"
+	op3 := &text.DrawOptions{}
+	op3.GeoM.Translate(screenWidth/2-100, screenHeight/2)
+	op3.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, promptText, assets.ScoreFont, op3)
+
+	// Draw current name input with cursor
+	nameText := g.nameInput + "_"
+	op4 := &text.DrawOptions{}
+	op4.GeoM.Translate(screenWidth/2-100, screenHeight/2+30)
+	op4.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, nameText, assets.ScoreFont, op4)
+
+	// Draw instruction
+	instructionText := "Press Enter to confirm"
+	op5 := &text.DrawOptions{}
+	op5.GeoM.Translate(screenWidth/2-120, screenHeight/2+70)
+	op5.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, instructionText, assets.ScoreFont, op5)
+}
+
+func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
+	return 800, 600
+}
+
+func (g *Game) Reset() {
+	g.batsman = NewBatsman()
+	g.balls = make([]*Ball, 0)
+	g.stumps.Reset()
+	g.ballSpawnTimer.Reset()
+	g.score = 0
+	g.state = GameStatePlaying
+	g.gameOverMessage = ""
+	g.nameInput = ""
+	g.isNewHighScore = false
+}
+
+func min(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
+}
