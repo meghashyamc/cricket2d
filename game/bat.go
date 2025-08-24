@@ -1,6 +1,7 @@
 package game
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -189,8 +190,13 @@ func (b *Bat) CheckBallCollision(ball *Ball) bool {
 
 	// Check distance from ball center to bat line
 	distance := b.distancePointToLine(ballCenter, batStart, batEnd)
+	if distance < 0 {
+		return false
+	}
+	fmt.Println("distance ---> ", distance)
+	fmt.Println("bat width ---> ", batWidth)
 
-	return distance <= ballRadius+batWidth
+	return distance <= (ballRadius + batWidth)
 
 }
 
@@ -201,29 +207,7 @@ func (b *Bat) distancePointToLine(point, lineStart, lineEnd Vector) float64 {
 	// Vector from line start to point
 	pointVec := Vector{X: point.X - lineStart.X, Y: point.Y - lineStart.Y}
 
-	// Length squared of the line
-	lineLengthSq := lineVec.X*lineVec.X + lineVec.Y*lineVec.Y
-
-	if lineLengthSq == 0 {
-		// Line is just a point, return distance to that point
-		dx := point.X - lineStart.X
-		dy := point.Y - lineStart.Y
-		return math.Sqrt(dx*dx + dy*dy)
-	}
-
-	// Project point onto line (clamped to line segment)
-	t := math.Max(0, math.Min(1, (pointVec.X*lineVec.X+pointVec.Y*lineVec.Y)/lineLengthSq))
-
-	// Find the closest point on the line segment
-	closestPoint := Vector{
-		X: lineStart.X + t*lineVec.X,
-		Y: lineStart.Y + t*lineVec.Y,
-	}
-
-	// Return distance from point to closest point on line
-	dx := point.X - closestPoint.X
-	dy := point.Y - closestPoint.Y
-	return math.Sqrt(dx*dx + dy*dy)
+	return -pointVec.Magnitude() * math.Cos(pointVec.AngleTo(lineVec))
 }
 
 func (b *Bat) Position() Vector {

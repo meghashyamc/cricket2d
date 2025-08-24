@@ -7,6 +7,39 @@ type Vector struct {
 	Y float64
 }
 
+// DotProduct calculates the dot product of two vectors
+func (v Vector) DotProduct(other Vector) float64 {
+	return v.X*other.X + v.Y*other.Y
+}
+
+// Magnitude calculates the magnitude (length) of a vector
+func (v Vector) Magnitude() float64 {
+	return math.Sqrt(v.X*v.X + v.Y*v.Y)
+}
+
+// AngleTo calculates the angle between this vector and another vector in radians
+func (v Vector) AngleTo(other Vector) float64 {
+	dot := v.DotProduct(other)
+	magV := v.Magnitude()
+	magOther := other.Magnitude()
+
+	// Handle zero-length vectors
+	if magV == 0 || magOther == 0 {
+		return 0
+	}
+
+	// cos(θ) = (A · B) / (|A| * |B|)
+	cosTheta := dot / (magV * magOther)
+
+	// Clamp to [-1, 1] to handle floating point precision issues
+	if cosTheta > 1 {
+		cosTheta = 1
+	} else if cosTheta < -1 {
+		cosTheta = -1
+	}
+
+	return math.Acos(cosTheta)
+}
 func (v Vector) Normalize() Vector {
 	magnitude := math.Sqrt(v.X*v.X + v.Y*v.Y)
 	if magnitude == 0 {
