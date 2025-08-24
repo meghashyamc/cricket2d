@@ -12,7 +12,7 @@ const (
 	batLength     = 100.0       // Length of the bat for physics calculations
 )
 
-type Batsman struct {
+type Bat struct {
 	position      Vector // Position of bat handle (pivot point)
 	sprite        *ebiten.Image
 	currentAngle  float64  // Current rotation angle (0 = vertical)
@@ -22,18 +22,18 @@ type Batsman struct {
 	mouseHistory  []Vector // Mouse history for calculating velocity
 }
 
-func NewBatsman() *Batsman {
+func NewBat() *Bat {
 	sprite := assets.BatSprite
 	bounds := sprite.Bounds()
 
 	// Position bat in the middle-left area (between stumps and right side)
 	// Align with stumps height
 	pos := Vector{
-		X: 200, // Between stumps (at ~50) and ball spawn area
+		X: 200,                                               // Between stumps (at ~50) and ball spawn area
 		Y: float64(screenHeight) - float64(bounds.Dy()) - 80, // Same height as stumps
 	}
 
-	return &Batsman{
+	return &Bat{
 		position:      pos,
 		sprite:        sprite,
 		currentAngle:  0, // Start vertical
@@ -44,7 +44,7 @@ func NewBatsman() *Batsman {
 	}
 }
 
-func (b *Batsman) Update() {
+func (b *Bat) Update() {
 	// Get current mouse position
 	mouseX, mouseY := ebiten.CursorPosition()
 	currentMousePos := Vector{X: float64(mouseX), Y: float64(mouseY)}
@@ -82,7 +82,7 @@ func (b *Batsman) Update() {
 	b.lastMousePos = currentMousePos
 }
 
-func (b *Batsman) Draw(screen *ebiten.Image) {
+func (b *Bat) Draw(screen *ebiten.Image) {
 	op := &ebiten.DrawImageOptions{}
 
 	// Get sprite bounds for centering rotation
@@ -103,7 +103,7 @@ func (b *Batsman) Draw(screen *ebiten.Image) {
 	screen.DrawImage(b.sprite, op)
 }
 
-func (b *Batsman) Collider() Rect {
+func (b *Bat) Collider() Rect {
 	// Create a more accurate collision rectangle that represents the rotated bat
 	bounds := b.sprite.Bounds()
 	batWidth := float64(bounds.Dx())
@@ -115,10 +115,10 @@ func (b *Batsman) Collider() Rect {
 
 	// Original corners (before rotation)
 	corners := []Vector{
-		{-halfWidth, 0},          // Top-left
-		{halfWidth, 0},           // Top-right
-		{halfWidth, batHeight},   // Bottom-right
-		{-halfWidth, batHeight},  // Bottom-left
+		{-halfWidth, 0},         // Top-left
+		{halfWidth, 0},          // Top-right
+		{halfWidth, batHeight},  // Bottom-right
+		{-halfWidth, batHeight}, // Bottom-left
 	}
 
 	// Rotate each corner and translate to bat position
@@ -127,7 +127,7 @@ func (b *Batsman) Collider() Rect {
 		// Rotate the corner
 		rotatedX := corner.X*math.Cos(b.currentAngle) - corner.Y*math.Sin(b.currentAngle)
 		rotatedY := corner.X*math.Sin(b.currentAngle) + corner.Y*math.Cos(b.currentAngle)
-		
+
 		// Translate to bat position
 		rotatedCorners[i] = Vector{
 			X: b.position.X + rotatedX,
@@ -160,7 +160,7 @@ func (b *Batsman) Collider() Rect {
 }
 
 // CheckBallCollision performs precise collision detection between bat and ball
-func (b *Batsman) CheckBallCollision(ball *Ball) bool {
+func (b *Bat) CheckBallCollision(ball *Ball) bool {
 	ballRect := ball.Collider()
 	ballCenter := Vector{
 		X: ballRect.X + ballRect.Width/2,
@@ -173,9 +173,9 @@ func (b *Batsman) CheckBallCollision(ball *Ball) bool {
 	batHeight := float64(bounds.Dy())
 	batWidth := float64(bounds.Dx())
 
-	// Calculate the main hitting area of the bat (central 80% of length)
-	startOffset := batHeight * 0.1  // Start 10% from handle
-	endOffset := batHeight * 0.9    // End 90% down the bat
+	// Calculate the main hitting area of the bat (central 95% of length)
+	startOffset := batHeight * 0.05 // Start 10% from handle
+	endOffset := batHeight * 0.95   // End 90% down the bat
 
 	// Calculate start and end points of the bat hitting line
 	batStart := Vector{
@@ -189,59 +189,57 @@ func (b *Batsman) CheckBallCollision(ball *Ball) bool {
 
 	// Check distance from ball center to bat line
 	distance := b.distancePointToLine(ballCenter, batStart, batEnd)
-	
-	// Add some thickness to the bat for more forgiving collision
-	batThickness := batWidth * 0.8
-	
-	return distance <= ballRadius+batThickness
+
+	return distance <= ballRadius+batWidth
+
 }
 
 // distancePointToLine calculates the shortest distance from a point to a line segment
-func (b *Batsman) distancePointToLine(point, lineStart, lineEnd Vector) float64 {
+func (b *Bat) distancePointToLine(point, lineStart, lineEnd Vector) float64 {
 	// Vector from line start to end
 	lineVec := Vector{X: lineEnd.X - lineStart.X, Y: lineEnd.Y - lineStart.Y}
 	// Vector from line start to point
 	pointVec := Vector{X: point.X - lineStart.X, Y: point.Y - lineStart.Y}
-	
+
 	// Length squared of the line
 	lineLengthSq := lineVec.X*lineVec.X + lineVec.Y*lineVec.Y
-	
+
 	if lineLengthSq == 0 {
 		// Line is just a point, return distance to that point
 		dx := point.X - lineStart.X
 		dy := point.Y - lineStart.Y
 		return math.Sqrt(dx*dx + dy*dy)
 	}
-	
+
 	// Project point onto line (clamped to line segment)
 	t := math.Max(0, math.Min(1, (pointVec.X*lineVec.X+pointVec.Y*lineVec.Y)/lineLengthSq))
-	
+
 	// Find the closest point on the line segment
 	closestPoint := Vector{
 		X: lineStart.X + t*lineVec.X,
 		Y: lineStart.Y + t*lineVec.Y,
 	}
-	
+
 	// Return distance from point to closest point on line
 	dx := point.X - closestPoint.X
 	dy := point.Y - closestPoint.Y
 	return math.Sqrt(dx*dx + dy*dy)
 }
 
-func (b *Batsman) Position() Vector {
+func (b *Bat) Position() Vector {
 	return b.position
 }
 
-func (b *Batsman) GetBatAngle() float64 {
+func (b *Bat) GetBatAngle() float64 {
 	return b.currentAngle
 }
 
-func (b *Batsman) GetSwingVelocity() float64 {
+func (b *Bat) GetSwingVelocity() float64 {
 	return b.swingVelocity
 }
 
 // Calculate the velocity of the bat tip for more realistic ball deflection
-func (b *Batsman) GetBatTipVelocity() Vector {
+func (b *Bat) GetBatTipVelocity() Vector {
 	// Calculate where the bat tip is
 	bounds := b.sprite.Bounds()
 	batHeight := float64(bounds.Dy())

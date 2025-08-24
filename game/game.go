@@ -31,32 +31,40 @@ const (
 )
 
 type Game struct {
-	batsman          *Batsman
+	Bat              *Bat
 	balls            []*Ball
 	stumps           *Stumps
-	ballSpawnTimer   *Timer
+	ballSpawnTimer   *time.Ticker
 	score            int
 	state            GameState
-	gameOverMessage  string
 	highScoreManager *HighScoreManager
-	nameInput        string
-	isNewHighScore   bool
 	Logger           logger.Logger
 }
 
 func NewGame() *Game {
+
 	return &Game{
-		batsman:          NewBatsman(),
+		Bat:              NewBat(),
 		balls:            make([]*Ball, 0),
 		stumps:           NewStumps(),
-		ballSpawnTimer:   NewTimer(ballSpawnTime),
+		ballSpawnTimer:   time.NewTicker(ballSpawnTime),
 		score:            0,
 		state:            GameStatePlaying,
 		highScoreManager: NewHighScoreManager(),
-		nameInput:        "",
-		isNewHighScore:   false,
 		Logger:           logger.New(),
 	}
+}
+
+func (g *Game) Run() error {
+
+	g.setupWindow()
+	return ebiten.RunGame(g)
+}
+
+func (g *Game) setupWindow() {
+	ebiten.SetWindowSize(1200, 800)
+	ebiten.SetWindowTitle("Cricket 2D")
+	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeDisabled)
 }
 
 func (g *Game) Update() error {
@@ -72,13 +80,12 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) updatePlaying() error {
-	g.batsman.Update()
+	g.Bat.Update()
 
-	// Spawn new balls
-	g.ballSpawnTimer.Update()
-	if g.ballSpawnTimer.IsReady() {
-		g.ballSpawnTimer.Reset()
+	select {
+	case <-g.ballSpawnTimer.C:
 		g.balls = append(g.balls, NewBall())
+	default:
 	}
 
 	// Update balls
@@ -92,9 +99,9 @@ func (g *Game) updatePlaying() error {
 			continue
 		}
 
-		// Check collision with batsman using precise collision detection
-		if g.batsman.CheckBallCollision(ball) {
-			ball.Hit(g.batsman.GetBatAngle(), g.batsman.GetSwingVelocity())
+		// Check collision with Bat using precise collision detection
+		if g.Bat.CheckBallCollision(ball) {
+			ball.Hit(g.Bat.GetBatAngle(), g.Bat.GetSwingVelocity())
 			g.score++
 			continue
 		}
@@ -118,18 +125,17 @@ func (g *Game) updateGameOver() error {
 }
 
 func (g *Game) updateNameInput() error {
-	// Handle text input for name
-	g.nameInput += string(ebiten.AppendInputChars(nil))
+	nameInput := string(ebiten.AppendInputChars(nil))
 
 	// Handle backspace
-	if inpututil.IsKeyJustPressed(ebiten.KeyBackspace) && len(g.nameInput) > 0 {
-		g.nameInput = g.nameInput[:len(g.nameInput)-1]
+	if inpututil.IsKeyJustPressed(ebiten.KeyBackspace) && len(nameInput) > 0 {
+		nameInput = nameInput[:len(nameInput)-1]
 	}
 
 	// Handle enter to submit name
 	if inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
-		if g.nameInput == "" {
-			g.nameInput = "Anonymous"
+		if nameInput == "" {
+			nameInput = "Anonymous"
 		}
 		// Clean the name (remove non-printable characters)
 		cleanName := strings.Map(func(r rune) rune {
@@ -137,21 +143,17 @@ func (g *Game) updateNameInput() error {
 				return r
 			}
 			return -1
-		}, g.nameInput)
+		}, nameInput)
 
 		g.highScoreManager.SetHighScore(g.score, cleanName)
 		g.state = GameStateGameOver
-		g.isNewHighScore = false
-		g.nameInput = ""
 	}
 
 	return nil
 }
 
 func (g *Game) endGame(message string) {
-	g.gameOverMessage = message
 	if g.highScoreManager.IsNewHighScore(g.score) {
-		g.isNewHighScore = true
 		g.state = GameStateNameInput
 	} else {
 		g.state = GameStateGameOver
@@ -166,7 +168,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	case GameStatePlaying:
 		g.drawPlaying(screen)
 	case GameStateGameOver:
-		g.drawGameOver(screen)
+		g.drawGameOver(screen, "OUT!")
 	case GameStateNameInput:
 		g.drawNameInput(screen)
 	}
@@ -176,8 +178,8 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 	// Draw stumps
 	g.stumps.Draw(screen)
 
-	// Draw batsman
-	g.batsman.Draw(screen)
+	// Draw Bat
+	g.Bat.Draw(screen)
 
 	// Draw balls
 	for _, ball := range g.balls {
@@ -209,9 +211,8 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 	text.Draw(screen, instructionText, assets.ScoreFont, op3)
 }
 
-func (g *Game) drawGameOver(screen *ebiten.Image) {
+func (g *Game) drawGameOver(screen *ebiten.Image, gameOverText string) {
 	// Draw final score and game over message
-	gameOverText := g.gameOverMessage
 	op := &text.DrawOptions{}
 	op.GeoM.Translate(screenWidth/2-100, screenHeight/2-60)
 	op.ColorScale.ScaleWithColor(color.White)
@@ -259,7 +260,7 @@ func (g *Game) drawNameInput(screen *ebiten.Image) {
 	text.Draw(screen, promptText, assets.ScoreFont, op3)
 
 	// Draw current name input with cursor
-	nameText := g.nameInput + "_"
+	nameText := "_"
 	op4 := &text.DrawOptions{}
 	op4.GeoM.Translate(screenWidth/2-100, screenHeight/2+30)
 	op4.ColorScale.ScaleWithColor(color.White)
@@ -278,20 +279,18 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 }
 
 func (g *Game) Reset() {
-	g.batsman = NewBatsman()
+	g.Bat = NewBat()
 	g.balls = make([]*Ball, 0)
 	g.stumps.Reset()
-	g.ballSpawnTimer.Reset()
+	g.ballSpawnTimer.Reset(ballSpawnTime)
 	g.score = 0
 	g.state = GameStatePlaying
-	g.gameOverMessage = ""
-	g.nameInput = ""
-	g.isNewHighScore = false
+
 }
 
 func (g *Game) drawCollisionRectangles(screen *ebiten.Image) {
 	// Draw bat collision rectangle in red
-	batRect := g.batsman.Collider()
+	batRect := g.Bat.Collider()
 	g.drawRectangleOutline(screen, batRect, color.RGBA{255, 0, 0, 255}) // Red
 
 	// Draw ball collision rectangles in green
@@ -335,11 +334,4 @@ func (g *Game) drawRectangleOutline(screen *ebiten.Image, rect Rect, col color.C
 	op.GeoM.Scale(1, rect.Height)
 	op.GeoM.Translate(rect.X+rect.Width-1, rect.Y)
 	screen.DrawImage(lineImg, op)
-}
-
-func min(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
 }

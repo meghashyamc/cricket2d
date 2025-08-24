@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	ballSpeed          = 200.0
-	ballGravity        = 150.0 // Gravity for hit balls
+	ballSpeed          = 500.0
+	ballGravity        = 100.0 // Gravity for hit balls
 	hitSpeedMultiplier = 1.5   // How much the bat speed affects ball speed
 	minDeflectionSpeed = 100.0 // Minimum speed after being hit
 	curveStrength      = 30.0  // How much the ball curves
@@ -30,7 +30,7 @@ func NewBall() *Ball {
 	bounds := sprite.Bounds()
 
 	// Spawn ball at random height from horizontal middle line and above
-	midHeight := float64(screenHeight) / 2
+	midHeight := 2 * float64(screenHeight) / 3
 	startY := rand.Float64()*(midHeight-100) + 50 // From top to middle line only
 
 	return &Ball{
@@ -45,7 +45,6 @@ func NewBall() *Ball {
 		sprite: sprite,
 		active: true,
 		hit:    false,
-		time:   0,
 	}
 }
 
@@ -58,14 +57,7 @@ func (b *Ball) Update() {
 	b.time += 1.0 / 60.0 // Increment by frame time (assuming 60 FPS)
 
 	// Apply gravity if ball was hit
-	if b.hit {
-		b.velocity.Y += ballGravity / 3600.0 // 60 FPS squared
-	} else {
-		// Add curvy motion for non-hit balls (slight arc - up then down)
-		// Use sine wave to create the curve effect
-		curveOffset := math.Sin(b.time*2.0) * curveStrength / 60.0 // Convert to pixels per frame
-		b.velocity.Y = curveOffset
-	}
+	b.velocity.Y += ballGravity / 3600.0 // 60 FPS squared
 
 	// Update position
 	b.position = b.position.Add(b.velocity)
@@ -111,8 +103,8 @@ func (b *Ball) IsActive() bool {
 }
 
 func (b *Ball) Hit(batAngle float64, swingVelocity float64) {
-	if b.hit {
-		return // Already been hit
+	if !b.active {
+		return
 	}
 
 	b.hit = true

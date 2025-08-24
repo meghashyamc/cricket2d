@@ -1,18 +1,17 @@
 package main
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
+	"os"
+
 	"github.com/meghashyamc/cricket2d/game"
 )
 
 func main() {
-	ebiten.SetWindowSize(1200, 800)
-	ebiten.SetWindowTitle("Cricket 2D")
-	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeDisabled)
 
 	g := game.NewGame()
 
-	if err := ebiten.RunGame(g); err != nil {
+	if err := g.Run(); err != nil {
 		g.Logger.Error("error running game", "error", err)
+		os.Exit(1)
 	}
 }
