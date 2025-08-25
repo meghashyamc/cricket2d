@@ -138,7 +138,3 @@ func (b *Ball) Hit(batAngle float64, swingVelocity float64) {
 		b.velocity.Y -= 30.0 / 60.0 // Add upward velocity
 	}
 }
-
-func (b *Ball) Deactivate() {
-	b.active = false
-}

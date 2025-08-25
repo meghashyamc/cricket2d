@@ -61,7 +61,7 @@ func (b *Bat) Update() {
 	deltaY := currentMousePos.Y - b.position.Y
 
 	// Calculate angle from vertical (0 = vertical, positive = clockwise)
-	targetAngle := math.Atan2(-deltaX, -deltaY) // Note: -deltaY because Y increases downward
+	targetAngle := math.Atan2(-deltaX, math.Abs(deltaY)) // Note: -deltaY because Y increases downward
 
 	// Clamp angle to maximum swing range
 	if targetAngle > maxSwingAngle {
@@ -76,6 +76,8 @@ func (b *Bat) Update() {
 	// Smoothly interpolate to target angle (makes bat movement feel more natural)
 	angleSpeed := 0.3 // How fast the bat follows the mouse
 	b.currentAngle += (targetAngle - b.currentAngle) * angleSpeed
+
+	fmt.Println("b.currentAngle----------->", b.currentAngle)
 
 	// Calculate swing velocity (angular velocity)
 	b.swingVelocity = b.currentAngle - b.previousAngle
@@ -193,8 +195,6 @@ func (b *Bat) CheckBallCollision(ball *Ball) bool {
 	if distance < 0 {
 		return false
 	}
-	fmt.Println("distance ---> ", distance)
-	fmt.Println("bat width ---> ", batWidth)
 
 	return distance <= (ballRadius + batWidth)
 
