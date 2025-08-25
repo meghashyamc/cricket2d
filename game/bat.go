@@ -76,9 +76,8 @@ func (b *Bat) Update() {
 	// Smoothly interpolate to target angle (makes bat movement feel more natural)
 	angleSpeed := 0.3 // How fast the bat follows the mouse
 	b.currentAngle += (targetAngle - b.currentAngle) * angleSpeed
-
-	fmt.Println("b.currentAngle----------->", b.currentAngle)
-
+	// fmt.Println("target angle--------------OF BAT------>", targetAngle)
+	// fmt.Println("current angle--------------OF BAT------>", b.currentAngle)
 	// Calculate swing velocity (angular velocity)
 	b.swingVelocity = b.currentAngle - b.previousAngle
 
@@ -182,21 +181,36 @@ func (b *Bat) CheckBallCollision(ball *Ball) bool {
 
 	// Calculate start and end points of the bat hitting line
 	batStart := Vector{
-		X: b.position.X + math.Sin(b.currentAngle)*startOffset,
-		Y: b.position.Y + math.Cos(b.currentAngle)*startOffset,
+		X: b.position.X + math.Sin(-b.currentAngle)*startOffset,
+		Y: b.position.Y + math.Cos(-b.currentAngle)*startOffset,
 	}
 	batEnd := Vector{
-		X: b.position.X + math.Sin(b.currentAngle)*endOffset,
-		Y: b.position.Y + math.Cos(b.currentAngle)*endOffset,
+		X: b.position.X + math.Sin(-b.currentAngle)*endOffset,
+		Y: b.position.Y + math.Cos(-b.currentAngle)*endOffset,
 	}
 
+	fmt.Println("=============ball==================")
+
+	fmt.Println("ball center------------------>", ballCenter)
+	fmt.Println("bat x----->", b.position.X)
+	fmt.Println("bat y----->", b.position.Y)
+	fmt.Println("bat angle----->", b.currentAngle)
+	fmt.Println("start offset ----->", startOffset)
+	fmt.Println("end offset ----->", endOffset)
+	fmt.Println("bat height ------->", batHeight)
+	fmt.Println("bat start vector------------>", batStart)
+	fmt.Println("bat end vector------------>", batEnd)
 	// Check distance from ball center to bat line
 	distance := b.distancePointToLine(ballCenter, batStart, batEnd)
+
+	fmt.Println("distance--------------------->", distance)
+	fmt.Println("===================================")
+
 	if distance < 0 {
 		return false
 	}
 
-	return distance <= (ballRadius + batWidth)
+	return distance <= (ballRadius + batWidth/2)
 
 }
 
@@ -206,8 +220,16 @@ func (b *Bat) distancePointToLine(point, lineStart, lineEnd Vector) float64 {
 	lineVec := Vector{X: lineEnd.X - lineStart.X, Y: lineEnd.Y - lineStart.Y}
 	// Vector from line start to point
 	pointVec := Vector{X: point.X - lineStart.X, Y: point.Y - lineStart.Y}
-
-	return -pointVec.Magnitude() * math.Cos(pointVec.AngleTo(lineVec))
+	fmt.Println("point vec magnitude------------>", pointVec.Magnitude())
+	fmt.Println("line vec magnitude------------>", lineVec.Magnitude())
+	fmt.Println("line x---------------->", lineVec.X)
+	fmt.Println("line y---------------->", lineVec.Y)
+	fmt.Println("line end x----------->", lineEnd.X)
+	fmt.Println("line start x----------->", lineStart.X)
+	fmt.Println("point x---------------->", point.X)
+	fmt.Println("point y---------------->", point.Y)
+	fmt.Println("angle---------------->", pointVec.AngleTo(lineVec))
+	return pointVec.Magnitude() * math.Sin(pointVec.AngleTo(lineVec))
 }
 
 func (b *Bat) Position() Vector {

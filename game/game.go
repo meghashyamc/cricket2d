@@ -32,7 +32,7 @@ const (
 
 type Game struct {
 	Bat              *Bat
-	balls            []*Ball
+	balls            map[*Ball]struct{}
 	stumps           *Stumps
 	ballSpawnTimer   *time.Ticker
 	score            int
@@ -45,7 +45,7 @@ func NewGame() *Game {
 
 	return &Game{
 		Bat:              NewBat(),
-		balls:            make([]*Ball, 0),
+		balls:            make(map[*Ball]struct{}),
 		stumps:           NewStumps(),
 		ballSpawnTimer:   time.NewTicker(ballSpawnTime),
 		score:            0,
@@ -58,6 +58,7 @@ func NewGame() *Game {
 func (g *Game) Run() error {
 
 	g.setupWindow()
+	// ebiten.SetTPS(1)
 	return ebiten.RunGame(g)
 }
 
@@ -84,18 +85,18 @@ func (g *Game) updatePlaying() error {
 
 	select {
 	case <-g.ballSpawnTimer.C:
-		g.balls = append(g.balls, NewBall())
+		newBall := NewBall()
+		g.balls[newBall] = struct{}{}
 	default:
 	}
-
+	ballsToDeactivate := make([]*Ball, 0)
 	// Update balls
-	for i := len(g.balls) - 1; i >= 0; i-- {
-		ball := g.balls[i]
+	for ball := range g.balls {
 		ball.Update()
 
 		if !ball.IsActive() {
 			// Remove inactive balls
-			g.balls = append(g.balls[:i], g.balls[i+1:]...)
+			ballsToDeactivate = append(ballsToDeactivate, ball)
 			continue
 		}
 
@@ -108,10 +109,17 @@ func (g *Game) updatePlaying() error {
 
 		// Check collision with stumps
 		if g.stumps.CheckCollision(ball) {
+			fmt.Println("Ball hit stumps============")
+			fmt.Println("ball x------------------->", ball.position.X)
+			fmt.Println("ball y------------------->", ball.position.Y)
 			g.stumps.Fall()
 			g.endGame("BOWLED OUT!")
 			break
 		}
+	}
+
+	for _, ball := range ballsToDeactivate {
+		delete(g.balls, ball)
 	}
 
 	return nil
@@ -182,7 +190,7 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 	g.Bat.Draw(screen)
 
 	// Draw balls
-	for _, ball := range g.balls {
+	for ball := range g.balls {
 		ball.Draw(screen)
 	}
 
@@ -280,7 +288,7 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 
 func (g *Game) Reset() {
 	g.Bat = NewBat()
-	g.balls = make([]*Ball, 0)
+	g.balls = make(map[*Ball]struct{})
 	g.stumps.Reset()
 	g.ballSpawnTimer.Reset(ballSpawnTime)
 	g.score = 0
@@ -294,7 +302,7 @@ func (g *Game) drawCollisionRectangles(screen *ebiten.Image) {
 	g.drawRectangleOutline(screen, batRect, color.RGBA{255, 0, 0, 255}) // Red
 
 	// Draw ball collision rectangles in green
-	for _, ball := range g.balls {
+	for ball := range g.balls {
 		if ball.IsActive() {
 			ballRect := ball.Collider()
 			g.drawRectangleOutline(screen, ballRect, color.RGBA{0, 255, 0, 255}) // Green
