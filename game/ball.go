@@ -6,6 +6,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/meghashyamc/cricket2d/assets"
+	"github.com/meghashyamc/cricket2d/logger"
 )
 
 const (
@@ -23,6 +24,7 @@ type Ball struct {
 	active   bool
 	hit      bool
 	time     float64 // Time since ball was created (for curve calculation)
+	logger   logger.Logger
 }
 
 func NewBall() *Ball {
@@ -33,7 +35,7 @@ func NewBall() *Ball {
 	midHeight := 2 * float64(screenHeight) / 3
 	startY := rand.Float64()*(midHeight-100) + 50 // From top to middle line only
 
-	return &Ball{
+	ball := &Ball{
 		position: Vector{
 			X: screenWidth + float64(bounds.Dx()), // Start off-screen right
 			Y: startY,
@@ -45,7 +47,11 @@ func NewBall() *Ball {
 		sprite: sprite,
 		active: true,
 		hit:    false,
+		logger: logger.New(),
 	}
+	
+	ball.logger.Debug("ball created", "position", ball.position, "velocity", ball.velocity)
+	return ball
 }
 
 func (b *Ball) Update() {
@@ -68,6 +74,9 @@ func (b *Ball) Update() {
 		b.position.X < -float64(bounds.Dx()) ||
 		b.position.X > screenWidth+float64(bounds.Dx()) ||
 		b.position.Y < -float64(bounds.Dy()) {
+		b.logger.Debug("ball went off screen", "position", b.position, "screenBounds", map[string]interface{}{
+			"width": screenWidth, "height": screenHeight,
+		})
 		b.active = false
 	}
 }
@@ -107,6 +116,7 @@ func (b *Ball) Hit(batAngle float64, swingVelocity float64) bool {
 		return false
 	}
 
+	oldVelocity := b.velocity
 	b.hit = true
 
 	// Calculate deflection based on bat angle and swing velocity
@@ -137,5 +147,15 @@ func (b *Ball) Hit(batAngle float64, swingVelocity float64) bool {
 	if b.velocity.Y > -50.0/60.0 { // If not already going up significantly
 		b.velocity.Y -= 30.0 / 60.0 // Add upward velocity
 	}
+	
+	b.logger.Debug("ball hit physics calculated", 
+		"batAngle", batAngle,
+		"swingVelocity", swingVelocity,
+		"deflectionAngle", deflectionAngle,
+		"hitSpeed", hitSpeed,
+		"oldVelocity", oldVelocity,
+		"newVelocity", b.velocity,
+	)
+	
 	return true
 }

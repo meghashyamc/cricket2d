@@ -5,6 +5,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/meghashyamc/cricket2d/assets"
+	"github.com/meghashyamc/cricket2d/logger"
 )
 
 const (
@@ -20,6 +21,7 @@ type Bat struct {
 	swingVelocity float64  // Angular velocity
 	lastMousePos  Vector   // Last mouse position
 	mouseHistory  []Vector // Mouse history for calculating velocity
+	logger        logger.Logger
 }
 
 func NewBat() *Bat {
@@ -33,7 +35,7 @@ func NewBat() *Bat {
 		Y: float64(screenHeight) - float64(bounds.Dy()) - 80, // Same height as stumps
 	}
 
-	return &Bat{
+	bat := &Bat{
 		position:      pos,
 		sprite:        sprite,
 		currentAngle:  0, // Start vertical
@@ -41,7 +43,11 @@ func NewBat() *Bat {
 		swingVelocity: 0,
 		lastMousePos:  Vector{0, 0},
 		mouseHistory:  make([]Vector, 0, 10), // Keep last 10 positions for velocity calc
+		logger:        logger.New(),
 	}
+	
+	bat.logger.Debug("bat created", "position", bat.position, "maxSwingAngle", maxSwingAngle)
+	return bat
 }
 
 func (b *Bat) Update() {
@@ -78,6 +84,16 @@ func (b *Bat) Update() {
 
 	// Calculate swing velocity (angular velocity)
 	b.swingVelocity = b.currentAngle - b.previousAngle
+
+	// Log significant swing movements for debugging
+	if math.Abs(b.swingVelocity) > 0.05 { // Only log significant swings
+		b.logger.Debug("significant bat swing", 
+			"currentAngle", b.currentAngle,
+			"previousAngle", b.previousAngle,
+			"swingVelocity", b.swingVelocity,
+			"mousePos", currentMousePos,
+		)
+	}
 
 	b.lastMousePos = currentMousePos
 }
@@ -194,8 +210,20 @@ func (b *Bat) CheckBallCollision(ball *Ball) bool {
 		return false
 	}
 
-	return distance <= (ballRadius + batWidth/2)
-
+	collision := distance <= (ballRadius + batWidth/2)
+	
+	if collision {
+		b.logger.Debug("collision detection details", 
+			"ballCenter", ballCenter,
+			"ballRadius", ballRadius,
+			"batStart", batStart,
+			"batEnd", batEnd,
+			"distance", distance,
+			"threshold", ballRadius + batWidth/2,
+		)
+	}
+	
+	return collision
 }
 
 // distancePointToLine calculates the shortest distance from a point to a line segment

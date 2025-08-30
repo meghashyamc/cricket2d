@@ -17,8 +17,8 @@ type Logger interface {
 
 func New() Logger {
 	opts := &slog.HandlerOptions{
-		Level:     slog.LevelInfo, // minimum log level
-		AddSource: true,           // include file + line number
+		Level:     slog.LevelDebug, // minimum log level - set to debug to enable debug logs
+		AddSource: true,            // include file + line number
 	}
 	handler := slog.NewJSONHandler(os.Stderr, opts)
 	return slog.New(handler)

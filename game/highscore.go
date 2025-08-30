@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	
+	"github.com/meghashyamc/cricket2d/logger"
 )
 
 type HighScore struct {
@@ -15,6 +17,7 @@ type HighScore struct {
 type HighScoreManager struct {
 	filePath  string
 	highScore HighScore
+	logger    logger.Logger
 }
 
 func NewHighScoreManager() *HighScoreManager {
@@ -34,42 +37,59 @@ func NewHighScoreManager() *HighScoreManager {
 			Score: 0,
 			Name:  "",
 		},
+		logger: logger.New(),
 	}
 
+	hsm.logger.Debug("high score manager created", "filePath", scorePath)
 	hsm.Load()
 	return hsm
 }
 
 func (hsm *HighScoreManager) Load() {
+	hsm.logger.Debug("attempting to load high score", "filePath", hsm.filePath)
 	data, err := os.ReadFile(hsm.filePath)
 	if err != nil {
 		// File doesn't exist or can't be read, use default values
+		hsm.logger.Debug("high score file not found or unreadable, using defaults", "error", err)
 		return
 	}
 
 	var loadedScore HighScore
 	if err := json.Unmarshal(data, &loadedScore); err != nil {
 		// Invalid JSON, use default values
+		hsm.logger.Debug("invalid JSON in high score file, using defaults", "error", err)
 		return
 	}
 
 	hsm.highScore = loadedScore
+	hsm.logger.Debug("high score loaded successfully", "score", loadedScore.Score, "name", loadedScore.Name)
 }
 
 func (hsm *HighScoreManager) Save() error {
+	hsm.logger.Debug("attempting to save high score", "score", hsm.highScore.Score, "name", hsm.highScore.Name)
 	data, err := json.Marshal(hsm.highScore)
 	if err != nil {
+		hsm.logger.Debug("failed to marshal high score", "error", err)
 		return err
 	}
 
-	return os.WriteFile(hsm.filePath, data, 0644)
+	err = os.WriteFile(hsm.filePath, data, 0644)
+	if err != nil {
+		hsm.logger.Debug("failed to write high score file", "error", err)
+	} else {
+		hsm.logger.Debug("high score saved successfully", "filePath", hsm.filePath)
+	}
+	return err
 }
 
 func (hsm *HighScoreManager) IsNewHighScore(score int) bool {
-	return score > hsm.highScore.Score
+	isNew := score > hsm.highScore.Score
+	hsm.logger.Debug("checking if new high score", "currentScore", score, "existingHighScore", hsm.highScore.Score, "isNewHighScore", isNew)
+	return isNew
 }
 
 func (hsm *HighScoreManager) SetHighScore(score int, name string) error {
+	hsm.logger.Debug("setting new high score", "score", score, "name", name)
 	hsm.highScore.Score = score
 	hsm.highScore.Name = name
 	return hsm.Save()

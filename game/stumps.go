@@ -3,12 +3,14 @@ package game
 import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/meghashyamc/cricket2d/assets"
+	"github.com/meghashyamc/cricket2d/logger"
 )
 
 type Stumps struct {
 	position Vector
 	sprite   *ebiten.Image
 	fallen   bool
+	logger   logger.Logger
 }
 
 func NewStumps() *Stumps {
@@ -21,11 +23,15 @@ func NewStumps() *Stumps {
 		Y: float64(screenHeight) - float64(bounds.Dy()) - 80, // 80 pixels from bottom
 	}
 
-	return &Stumps{
+	stumps := &Stumps{
 		position: pos,
 		sprite:   sprite,
 		fallen:   false,
+		logger:   logger.New(),
 	}
+	
+	stumps.logger.Debug("stumps created", "position", pos, "bounds", bounds)
+	return stumps
 }
 
 func (s *Stumps) Update() {
@@ -71,6 +77,7 @@ func (s *Stumps) CheckCollision(ball *Ball) bool {
 }
 
 func (s *Stumps) Fall() {
+	s.logger.Debug("stumps falling")
 	s.fallen = true
 }
 
@@ -79,5 +86,6 @@ func (s *Stumps) IsFallen() bool {
 }
 
 func (s *Stumps) Reset() {
+	s.logger.Debug("stumps reset")
 	s.fallen = false
 }

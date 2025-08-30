@@ -42,8 +42,7 @@ type Game struct {
 }
 
 func NewGame() *Game {
-
-	return &Game{
+	g := &Game{
 		Bat:              NewBat(),
 		balls:            make(map[*Ball]struct{}),
 		stumps:           NewStumps(),
@@ -53,10 +52,13 @@ func NewGame() *Game {
 		highScoreManager: NewHighScoreManager(),
 		Logger:           logger.New(),
 	}
+	
+	g.Logger.Debug("game initialized", "screenWidth", screenWidth, "screenHeight", screenHeight, "ballSpawnTime", ballSpawnTime)
+	return g
 }
 
 func (g *Game) Run() error {
-
+	g.Logger.Debug("starting game")
 	g.setupWindow()
 	// ebiten.SetTPS(1)
 	return ebiten.RunGame(g)
@@ -87,6 +89,7 @@ func (g *Game) updatePlaying() error {
 	case <-g.ballSpawnTimer.C:
 		newBall := NewBall()
 		g.balls[newBall] = struct{}{}
+		g.Logger.Debug("new ball spawned", "ballCount", len(g.balls), "ballPosition", newBall.position)
 	default:
 	}
 	ballsToDeactivate := make([]*Ball, 0)
@@ -102,14 +105,17 @@ func (g *Game) updatePlaying() error {
 
 		// Check collision with Bat using precise collision detection
 		if g.Bat.CheckBallCollision(ball) {
+			g.Logger.Debug("bat collision detected", "ballPosition", ball.position, "batAngle", g.Bat.GetBatAngle(), "swingVelocity", g.Bat.GetSwingVelocity())
 			if ball.Hit(g.Bat.GetBatAngle(), g.Bat.GetSwingVelocity()) {
 				g.score++
+				g.Logger.Debug("ball hit successfully", "newScore", g.score, "ballVelocity", ball.velocity)
 			}
 			continue
 		}
 
 		// Check collision with stumps
 		if g.stumps.CheckCollision(ball) {
+			g.Logger.Debug("stumps collision detected", "ballPosition", ball.position, "score", g.score)
 			g.stumps.Fall()
 			g.endGame("BOWLED OUT!")
 			break
@@ -159,9 +165,12 @@ func (g *Game) updateNameInput() error {
 }
 
 func (g *Game) endGame(message string) {
+	g.Logger.Debug("game ended", "message", message, "finalScore", g.score)
 	if g.highScoreManager.IsNewHighScore(g.score) {
+		g.Logger.Debug("new high score achieved", "score", g.score)
 		g.state = GameStateNameInput
 	} else {
+		g.Logger.Debug("game over, no new high score", "score", g.score, "currentHighScore", g.highScoreManager.GetHighScore().Score)
 		g.state = GameStateGameOver
 	}
 }
@@ -285,13 +294,14 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 }
 
 func (g *Game) Reset() {
+	g.Logger.Debug("resetting game")
 	g.Bat = NewBat()
 	g.balls = make(map[*Ball]struct{})
 	g.stumps.Reset()
 	g.ballSpawnTimer.Reset(ballSpawnTime)
 	g.score = 0
 	g.state = GameStatePlaying
-
+	g.Logger.Debug("game reset complete", "state", g.state)
 }
 
 func (g *Game) drawCollisionRectangles(screen *ebiten.Image) {
