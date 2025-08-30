@@ -45,7 +45,7 @@ func NewBat() *Bat {
 		mouseHistory:  make([]Vector, 0, 10), // Keep last 10 positions for velocity calc
 		logger:        logger.New(),
 	}
-	
+
 	bat.logger.Debug("bat created", "position", bat.position, "maxSwingAngle", maxSwingAngle)
 	return bat
 }
@@ -84,16 +84,6 @@ func (b *Bat) Update() {
 
 	// Calculate swing velocity (angular velocity)
 	b.swingVelocity = b.currentAngle - b.previousAngle
-
-	// Log significant swing movements for debugging
-	if math.Abs(b.swingVelocity) > 0.05 { // Only log significant swings
-		b.logger.Debug("significant bat swing", 
-			"currentAngle", b.currentAngle,
-			"previousAngle", b.previousAngle,
-			"swingVelocity", b.swingVelocity,
-			"mousePos", currentMousePos,
-		)
-	}
 
 	b.lastMousePos = currentMousePos
 }
@@ -210,20 +200,8 @@ func (b *Bat) CheckBallCollision(ball *Ball) bool {
 		return false
 	}
 
-	collision := distance <= (ballRadius + batWidth/2)
-	
-	if collision {
-		b.logger.Debug("collision detection details", 
-			"ballCenter", ballCenter,
-			"ballRadius", ballRadius,
-			"batStart", batStart,
-			"batEnd", batEnd,
-			"distance", distance,
-			"threshold", ballRadius + batWidth/2,
-		)
-	}
-	
-	return collision
+	return distance <= (ballRadius + batWidth/2)
+
 }
 
 // distancePointToLine calculates the shortest distance from a point to a line segment

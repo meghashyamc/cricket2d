@@ -52,7 +52,7 @@ func NewGame() *Game {
 		highScoreManager: NewHighScoreManager(),
 		Logger:           logger.New(),
 	}
-	
+
 	g.Logger.Debug("game initialized", "screenWidth", screenWidth, "screenHeight", screenHeight, "ballSpawnTime", ballSpawnTime)
 	return g
 }
@@ -105,7 +105,6 @@ func (g *Game) updatePlaying() error {
 
 		// Check collision with Bat using precise collision detection
 		if g.Bat.CheckBallCollision(ball) {
-			g.Logger.Debug("bat collision detected", "ballPosition", ball.position, "batAngle", g.Bat.GetBatAngle(), "swingVelocity", g.Bat.GetSwingVelocity())
 			if ball.Hit(g.Bat.GetBatAngle(), g.Bat.GetSwingVelocity()) {
 				g.score++
 				g.Logger.Debug("ball hit successfully", "newScore", g.score, "ballVelocity", ball.velocity)

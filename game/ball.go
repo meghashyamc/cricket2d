@@ -12,7 +12,7 @@ import (
 const (
 	ballSpeed          = 500.0
 	ballGravity        = 100.0 // Gravity for hit balls
-	hitSpeedMultiplier = 1.5   // How much the bat speed affects ball speed
+	hitSpeedMultiplier = 2     // How much the bat speed affects ball speed
 	minDeflectionSpeed = 100.0 // Minimum speed after being hit
 	curveStrength      = 30.0  // How much the ball curves
 )
@@ -49,7 +49,7 @@ func NewBall() *Ball {
 		hit:    false,
 		logger: logger.New(),
 	}
-	
+
 	ball.logger.Debug("ball created", "position", ball.position, "velocity", ball.velocity)
 	return ball
 }
@@ -119,11 +119,19 @@ func (b *Ball) Hit(batAngle float64, swingVelocity float64) bool {
 	oldVelocity := b.velocity
 	b.hit = true
 
-	// Calculate deflection based on bat angle and swing velocity
 	// Bat angle: 0 = vertical, positive = clockwise
+	normalAngle := batAngle + math.Pi/2
+	normalX := math.Cos(normalAngle)
+	normalY := math.Sin(normalAngle)
 
-	// Base deflection direction - perpendicular to bat
-	deflectionAngle := batAngle + math.Pi/2 // 90 degrees from bat angle
+	// Calculate reflected velocity vector
+	// Formula: reflected = incident - 2*(incident·normal)*normal
+	dotProduct := b.velocity.X*normalX + b.velocity.Y*normalY
+	reflectedX := b.velocity.X - 2*dotProduct*normalX
+	reflectedY := b.velocity.Y - 2*dotProduct*normalY
+
+	// Calculate deflection angle from reflected vector
+	deflectionAngle := math.Atan2(reflectedY, reflectedX)
 
 	// Add some randomness for more interesting gameplay
 	deflectionAngle += (rand.Float64() - 0.5) * 0.3 // ±0.15 radians (~8.5 degrees)
@@ -147,8 +155,8 @@ func (b *Ball) Hit(batAngle float64, swingVelocity float64) bool {
 	if b.velocity.Y > -50.0/60.0 { // If not already going up significantly
 		b.velocity.Y -= 30.0 / 60.0 // Add upward velocity
 	}
-	
-	b.logger.Debug("ball hit physics calculated", 
+
+	b.logger.Debug("ball hit physics calculated",
 		"batAngle", batAngle,
 		"swingVelocity", swingVelocity,
 		"deflectionAngle", deflectionAngle,
@@ -156,6 +164,6 @@ func (b *Ball) Hit(batAngle float64, swingVelocity float64) bool {
 		"oldVelocity", oldVelocity,
 		"newVelocity", b.velocity,
 	)
-	
+
 	return true
 }
