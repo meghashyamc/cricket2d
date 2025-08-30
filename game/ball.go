@@ -102,9 +102,9 @@ func (b *Ball) IsActive() bool {
 	return b.active
 }
 
-func (b *Ball) Hit(batAngle float64, swingVelocity float64) {
-	if !b.active {
-		return
+func (b *Ball) Hit(batAngle float64, swingVelocity float64) bool {
+	if b.hit || !b.active {
+		return false
 	}
 
 	b.hit = true
@@ -137,4 +137,5 @@ func (b *Ball) Hit(batAngle float64, swingVelocity float64) {
 	if b.velocity.Y > -50.0/60.0 { // If not already going up significantly
 		b.velocity.Y -= 30.0 / 60.0 // Add upward velocity
 	}
+	return true
 }

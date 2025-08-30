@@ -102,16 +102,14 @@ func (g *Game) updatePlaying() error {
 
 		// Check collision with Bat using precise collision detection
 		if g.Bat.CheckBallCollision(ball) {
-			ball.Hit(g.Bat.GetBatAngle(), g.Bat.GetSwingVelocity())
-			g.score++
+			if ball.Hit(g.Bat.GetBatAngle(), g.Bat.GetSwingVelocity()) {
+				g.score++
+			}
 			continue
 		}
 
 		// Check collision with stumps
 		if g.stumps.CheckCollision(ball) {
-			fmt.Println("Ball hit stumps============")
-			fmt.Println("ball x------------------->", ball.position.X)
-			fmt.Println("ball y------------------->", ball.position.Y)
 			g.stumps.Fall()
 			g.endGame("BOWLED OUT!")
 			break
