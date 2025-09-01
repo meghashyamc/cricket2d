@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	
+
+	"github.com/meghashyamc/cricket2d/config"
 	"github.com/meghashyamc/cricket2d/logger"
 )
 
@@ -18,31 +19,30 @@ type HighScoreManager struct {
 	filePath  string
 	highScore HighScore
 	logger    logger.Logger
+	cfg       *config.Config
 }
 
-func NewHighScoreManager() *HighScoreManager {
-	// Create scores directory in user's home directory or current directory
-	homeDir, err := os.UserHomeDir()
-	var scorePath string
-	if err != nil {
-		// Fallback to current directory if can't get home dir
-		scorePath = "cricket2d_highscore.json"
-	} else {
-		scorePath = filepath.Join(homeDir, ".cricket2d_highscore.json")
+func NewHighScoreManager(cfg *config.Config) (*HighScoreManager, error) {
+	logger := logger.New()
+	if err := os.MkdirAll(cfg.GetDataDir(), 0755); err != nil {
+		logger.Error("could not create data directory", "error", err)
+		return nil, err
 	}
 
+	scoreFilePath := filepath.Join(cfg.GetDataDir(), cfg.GetScoreFilename())
+
 	hsm := &HighScoreManager{
-		filePath: scorePath,
+		filePath: scoreFilePath,
 		highScore: HighScore{
 			Score: 0,
 			Name:  "",
 		},
-		logger: logger.New(),
+		logger: logger,
 	}
 
 	hsm.logger.Debug("high score manager created", "filePath", scorePath)
 	hsm.Load()
-	return hsm
+	return hsm, nil
 }
 
 func (hsm *HighScoreManager) Load() {

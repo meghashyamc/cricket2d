@@ -1,17 +1,24 @@
 package main
 
 import (
+	"fmt"
+	"log/slog"
 	"os"
 
+	"github.com/meghashyamc/cricket2d/config"
 	"github.com/meghashyamc/cricket2d/game"
 )
 
 func main() {
-
-	g := game.NewGame()
+	cfg, err := config.Load("")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to load config: %s\n", err)
+		os.Exit(1)
+	}
+	g := game.NewGame(cfg)
 
 	if err := g.Run(); err != nil {
-		g.Logger.Error("error running game", "error", err)
+		slog.Error("error running game", "error", err)
 		os.Exit(1)
 	}
 }

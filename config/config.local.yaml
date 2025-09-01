@@ -1,0 +1,12 @@
+window:
+  width: 1200
+  height: 800
+  title: "Cricket 2D"
+
+data:
+  dir: ./.data/cricket2d
+  scorefilename: cricket2d_highscore.json
+
+
+game:
+  ballspawntime_seconds: 2

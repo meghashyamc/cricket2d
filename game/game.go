@@ -7,19 +7,13 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/meghashyamc/cricket2d/config"
 	"github.com/meghashyamc/cricket2d/logger"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/meghashyamc/cricket2d/assets"
-)
-
-const (
-	screenWidth  = 1200
-	screenHeight = 800
-
-	ballSpawnTime = 2 * time.Second
 )
 
 type GameState int
@@ -31,46 +25,57 @@ const (
 )
 
 type Game struct {
-	Bat              *Bat
+	cfg              *config.Config
+	bat              *Bat
 	balls            map[*Ball]struct{}
 	stumps           *Stumps
 	ballSpawnTimer   *time.Ticker
 	score            int
 	state            GameState
 	highScoreManager *HighScoreManager
-	Logger           logger.Logger
+	logger           logger.Logger
+	userMessage      string
 }
 
-func NewGame() *Game {
-	g := &Game{
-		Bat:              NewBat(),
-		balls:            make(map[*Ball]struct{}),
-		stumps:           NewStumps(),
-		ballSpawnTimer:   time.NewTicker(ballSpawnTime),
-		score:            0,
-		state:            GameStatePlaying,
-		highScoreManager: NewHighScoreManager(),
-		Logger:           logger.New(),
+func NewGame(cfg *config.Config) (*Game, error) {
+	highScoreManager, err := NewHighScoreManager(cfg)
+	if err != nil {
+		return nil, err
 	}
 
-	g.Logger.Debug("game initialized", "screenWidth", screenWidth, "screenHeight", screenHeight, "ballSpawnTime", ballSpawnTime)
-	return g
+	g := &Game{
+		cfg:              cfg,
+		bat:              NewBat(),
+		balls:            make(map[*Ball]struct{}),
+		stumps:           NewStumps(),
+		ballSpawnTimer:   time.NewTicker(time.Duration(cfg.GetBallSpawnTime()) * time.Second),
+		score:            0,
+		state:            GameStatePlaying,
+		highScoreManager: highScoreManager,
+		logger:           logger.New(),
+		userMessage:      "",
+	}
+
+	g.logger.Info("game initialized", "ball_spawn_time_seconds", cfg.GetBallSpawnTime())
+	return g, nil
 }
 
 func (g *Game) Run() error {
-	g.Logger.Debug("starting game")
+	g.logger.Info("starting game")
 	g.setupWindow()
-	// ebiten.SetTPS(1)
+
+	// Running the game calls Update() on every 'tick'
 	return ebiten.RunGame(g)
 }
 
 func (g *Game) setupWindow() {
-	ebiten.SetWindowSize(1200, 800)
-	ebiten.SetWindowTitle("Cricket 2D")
+	ebiten.SetWindowSize(g.cfg.GetWindowWidth(), g.cfg.GetWindowHeight())
+	ebiten.SetWindowTitle(g.cfg.GetWindowTitle())
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeDisabled)
 }
 
 func (g *Game) Update() error {
+
 	switch g.state {
 	case GameStatePlaying:
 		return g.updatePlaying()
@@ -83,23 +88,33 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) updatePlaying() error {
-	g.Bat.Update()
+	g.bat.Update()
 
 	select {
+	// New balls should come in at regular intervals
 	case <-g.ballSpawnTimer.C:
 		newBall := NewBall()
 		g.balls[newBall] = struct{}{}
-		g.Logger.Debug("new ball spawned", "ballCount", len(g.balls), "ballPosition", newBall.position)
+		g.logger.Debug("new ball spawned", "ballCount", len(g.balls), "ballPosition", newBall.position)
+
+	// On every tick, check if the wicket has been hit by the bat
 	default:
-		if g.stumps.CheckCollision(nil, g.Bat) {
-			g.Logger.Debug("bat collided with stumps", "score", g.score)
+		if g.stumps.CheckCollision(nil, g.bat) {
+			g.logger.Debug("bat collided with stumps", "score", g.score)
 			g.stumps.Fall()
-			g.endGame("HIT WICKET!")
+			g.endGame(gameEndMessageHitWicket)
 			return nil
 		}
 	}
+
+	g.updateBalls()
+
+	return nil
+}
+
+func (g *Game) updateBalls() {
 	ballsToDeactivate := make([]*Ball, 0)
-	// Update balls
+
 	for ball := range g.balls {
 		ball.Update()
 
@@ -109,18 +124,18 @@ func (g *Game) updatePlaying() error {
 			continue
 		}
 
-		// Check collision with Bat using precise collision detection
-		if g.Bat.CheckBallCollision(ball) {
-			if ball.Hit(g.Bat.GetBatAngle(), g.Bat.GetSwingVelocity()) {
+		// Check collision with bat
+		if g.bat.CheckBallCollision(ball) {
+			if ball.Hit(g.bat.GetBatAngle(), g.bat.GetSwingVelocity()) {
 				g.score++
-				g.Logger.Debug("ball hit successfully", "newScore", g.score, "ballVelocity", ball.velocity)
+				g.logger.Debug("ball hit successfully", "newScore", g.score, "ballVelocity", ball.velocity)
 			}
 			continue
 		}
 
 		// Check collision with stumps
 		if g.stumps.CheckCollision(ball, nil) {
-			g.Logger.Debug("ball collided with stumps", "ballPosition", ball.position, "score", g.score)
+			g.logger.Debug("ball collided with stumps", "ballPosition", ball.position, "score", g.score)
 			g.stumps.Fall()
 			g.endGame("BOWLED OUT!")
 			break
@@ -130,8 +145,6 @@ func (g *Game) updatePlaying() error {
 	for _, ball := range ballsToDeactivate {
 		delete(g.balls, ball)
 	}
-
-	return nil
 }
 
 func (g *Game) updateGameReset() error {
@@ -170,12 +183,13 @@ func (g *Game) updateNameInput() error {
 }
 
 func (g *Game) endGame(message string) {
-	g.Logger.Debug("game ended", "message", message, "finalScore", g.score)
+	g.logger.Debug("game ended", "message", message, "finalScore", g.score)
+	g.userMessage = message
 	if g.highScoreManager.IsNewHighScore(g.score) {
-		g.Logger.Debug("new high score achieved", "score", g.score)
+		g.logger.Debug("new high score achieved", "score", g.score)
 		g.state = GameStateNameInput
 	} else {
-		g.Logger.Debug("game over, no new high score", "score", g.score, "currentHighScore", g.highScoreManager.GetHighScore().Score)
+		g.logger.Debug("game over, no new high score", "score", g.score, "currentHighScore", g.highScoreManager.GetHighScore().Score)
 		g.state = GameStateGameOver
 	}
 }
@@ -188,7 +202,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	case GameStatePlaying:
 		g.drawPlaying(screen)
 	case GameStateGameOver:
-		g.drawGameOver(screen, "OUT!")
+		g.drawGameOver(screen)
 	case GameStateNameInput:
 		g.drawNameInput(screen)
 	}
@@ -199,7 +213,7 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 	g.stumps.Draw(screen)
 
 	// Draw Bat
-	g.Bat.Draw(screen)
+	g.bat.Draw(screen)
 
 	// Draw balls
 	for ball := range g.balls {
@@ -231,19 +245,19 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 	text.Draw(screen, instructionText, assets.ScoreFont, op3)
 }
 
-func (g *Game) drawGameOver(screen *ebiten.Image, gameOverText string) {
+func (g *Game) drawGameOver(screen *ebiten.Image) {
 	// Draw stumps (will show out sprite if fallen)
 	g.stumps.Draw(screen)
 
 	// Draw bat (keep it visible)
-	g.Bat.Draw(screen)
+	g.bat.Draw(screen)
 
 	// Draw OUT text in big letters towards center-right
 	outOp := &text.DrawOptions{}
 	outOp.GeoM.Scale(2.0, 2.0) // Make text bigger
 	outOp.GeoM.Translate(screenWidth/2+50, screenHeight/2-100)
 	outOp.ColorScale.ScaleWithColor(color.RGBA{255, 50, 50, 255}) // Red color
-	text.Draw(screen, gameOverText, assets.ScoreFont, outOp)
+	text.Draw(screen, g.userMessage, assets.ScoreFont, outOp)
 
 	// Draw final score
 	scoreText := fmt.Sprintf("Final Score: %d", g.score)
@@ -307,19 +321,19 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 }
 
 func (g *Game) Reset() {
-	g.Logger.Debug("resetting game")
-	g.Bat = NewBat()
+	g.logger.Debug("resetting game")
+	g.bat = NewBat()
 	g.balls = make(map[*Ball]struct{})
 	g.stumps.Reset()
 	g.ballSpawnTimer.Reset(ballSpawnTime)
 	g.score = 0
 	g.state = GameStatePlaying
-	g.Logger.Debug("game reset complete", "state", g.state)
+	g.logger.Debug("game reset complete", "state", g.state)
 }
 
 func (g *Game) drawCollisionRectangles(screen *ebiten.Image) {
 	// Draw bat collision rectangle in red
-	batRect := g.Bat.Collider()
+	batRect := g.bat.Collider()
 	g.drawRectangleOutline(screen, batRect, color.RGBA{255, 0, 0, 255}) // Red
 
 	// Draw ball collision rectangles in green
