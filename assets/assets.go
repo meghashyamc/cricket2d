@@ -12,10 +12,11 @@ import (
 )
 
 var (
-	BallSprite   *ebiten.Image
-	BatSprite    *ebiten.Image
-	StumpsSprite *ebiten.Image
-	ScoreFont    *text.GoTextFace
+	BallSprite      *ebiten.Image
+	BatSprite       *ebiten.Image
+	StumpsSprite    *ebiten.Image
+	StumpsOutSprite *ebiten.Image
+	ScoreFont       *text.GoTextFace
 )
 
 //go:embed ball.png
@@ -27,10 +28,14 @@ var batPNG []byte
 //go:embed stumps.png
 var stumpsPNG []byte
 
+//go:embed stumps-out.png
+var stumpsOutPNG []byte
+
 func init() {
 	BallSprite = scaleImage(loadPNG(ballPNG), 0.7) // Make ball smaller (70% of original)
 	BatSprite = scaleImage(loadPNG(batPNG), 1.3)   // Make bat bigger (130% of original)
-	StumpsSprite = loadPNG(stumpsPNG)
+	StumpsSprite = scaleImage(loadPNG(stumpsPNG), 0.57)
+	StumpsOutSprite = scaleImage(loadPNG(stumpsOutPNG), 0.7)
 
 	fontSource, err := text.NewGoTextFaceSource(bytes.NewReader(goregular.TTF))
 	if err != nil {
@@ -54,11 +59,11 @@ func scaleImage(img *ebiten.Image, scale float64) *ebiten.Image {
 	bounds := img.Bounds()
 	newWidth := int(float64(bounds.Dx()) * scale)
 	newHeight := int(float64(bounds.Dy()) * scale)
-	
+
 	scaledImg := ebiten.NewImage(newWidth, newHeight)
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Scale(scale, scale)
 	scaledImg.DrawImage(img, op)
-	
+
 	return scaledImg
 }

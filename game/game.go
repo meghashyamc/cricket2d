@@ -75,7 +75,7 @@ func (g *Game) Update() error {
 	case GameStatePlaying:
 		return g.updatePlaying()
 	case GameStateGameOver:
-		return g.updateGameOver()
+		return g.updateGameReset()
 	case GameStateNameInput:
 		return g.updateNameInput()
 	}
@@ -91,6 +91,12 @@ func (g *Game) updatePlaying() error {
 		g.balls[newBall] = struct{}{}
 		g.Logger.Debug("new ball spawned", "ballCount", len(g.balls), "ballPosition", newBall.position)
 	default:
+		if g.stumps.CheckCollision(nil, g.Bat) {
+			g.Logger.Debug("bat collided with stumps", "score", g.score)
+			g.stumps.Fall()
+			g.endGame("HIT WICKET!")
+			return nil
+		}
 	}
 	ballsToDeactivate := make([]*Ball, 0)
 	// Update balls
@@ -113,8 +119,8 @@ func (g *Game) updatePlaying() error {
 		}
 
 		// Check collision with stumps
-		if g.stumps.CheckCollision(ball) {
-			g.Logger.Debug("stumps collision detected", "ballPosition", ball.position, "score", g.score)
+		if g.stumps.CheckCollision(ball, nil) {
+			g.Logger.Debug("ball collided with stumps", "ballPosition", ball.position, "score", g.score)
 			g.stumps.Fall()
 			g.endGame("BOWLED OUT!")
 			break
@@ -128,7 +134,7 @@ func (g *Game) updatePlaying() error {
 	return nil
 }
 
-func (g *Game) updateGameOver() error {
+func (g *Game) updateGameReset() error {
 	if ebiten.IsKeyPressed(ebiten.KeyR) {
 		g.Reset()
 	}
@@ -226,28 +232,36 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 }
 
 func (g *Game) drawGameOver(screen *ebiten.Image, gameOverText string) {
-	// Draw final score and game over message
-	op := &text.DrawOptions{}
-	op.GeoM.Translate(screenWidth/2-100, screenHeight/2-60)
-	op.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, gameOverText, assets.ScoreFont, op)
+	// Draw stumps (will show out sprite if fallen)
+	g.stumps.Draw(screen)
 
+	// Draw bat (keep it visible)
+	g.Bat.Draw(screen)
+
+	// Draw OUT text in big letters towards center-right
+	outOp := &text.DrawOptions{}
+	outOp.GeoM.Scale(2.0, 2.0) // Make text bigger
+	outOp.GeoM.Translate(screenWidth/2+50, screenHeight/2-100)
+	outOp.ColorScale.ScaleWithColor(color.RGBA{255, 50, 50, 255}) // Red color
+	text.Draw(screen, gameOverText, assets.ScoreFont, outOp)
+
+	// Draw final score
 	scoreText := fmt.Sprintf("Final Score: %d", g.score)
 	op2 := &text.DrawOptions{}
-	op2.GeoM.Translate(screenWidth/2-100, screenHeight/2-20)
+	op2.GeoM.Translate(screenWidth/2+50, screenHeight/2-40)
 	op2.ColorScale.ScaleWithColor(color.White)
 	text.Draw(screen, scoreText, assets.ScoreFont, op2)
 
 	// Draw high score
 	highScoreText := g.highScoreManager.GetHighScoreText()
 	op4 := &text.DrawOptions{}
-	op4.GeoM.Translate(screenWidth/2-100, screenHeight/2+10)
+	op4.GeoM.Translate(screenWidth/2+50, screenHeight/2-10)
 	op4.ColorScale.ScaleWithColor(color.White)
 	text.Draw(screen, highScoreText, assets.ScoreFont, op4)
 
 	restartText := "Press R to restart"
 	op3 := &text.DrawOptions{}
-	op3.GeoM.Translate(screenWidth/2-80, screenHeight/2+50)
+	op3.GeoM.Translate(screenWidth/2+50, screenHeight/2+30)
 	op3.ColorScale.ScaleWithColor(color.White)
 	text.Draw(screen, restartText, assets.ScoreFont, op3)
 }
