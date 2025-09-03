@@ -3,32 +3,38 @@ package game
 import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/meghashyamc/cricket2d/assets"
+	"github.com/meghashyamc/cricket2d/geometry"
 	"github.com/meghashyamc/cricket2d/logger"
 )
 
-type Stumps struct {
-	position  Vector
+const (
+	initialstumpsX        = 30
+	initialstumpsYPercent = 0.9 // Percentage of screen height (starting from top) where stumps are placed
+)
+
+type stumps struct {
+	position  geometry.Vector
 	sprite    *ebiten.Image
 	outSprite *ebiten.Image
-	fallen    bool
+	isFallen  bool
 	logger    logger.Logger
 }
 
-func NewStumps() *Stumps {
+func newStumps(screenHeight float64) *stumps {
 	sprite := assets.StumpsSprite
 	bounds := sprite.Bounds()
 
 	// Position stumps on the left side of screen, closer to the bottom
-	pos := Vector{
-		X: 30,                                                // Left side with some margin
-		Y: float64(screenHeight) - float64(bounds.Dy()) - 80, // 80 pixels from bottom
+	pos := geometry.Vector{
+		X: initialstumpsX,
+		Y: initialstumpsYPercent * (screenHeight - float64(bounds.Dy())),
 	}
 
-	stumps := &Stumps{
+	stumps := &stumps{
 		position:  pos,
 		sprite:    sprite,
 		outSprite: assets.StumpsOutSprite,
-		fallen:    false,
+		isFallen:  false,
 		logger:    logger.New(),
 	}
 
@@ -36,13 +42,13 @@ func NewStumps() *Stumps {
 	return stumps
 }
 
-func (s *Stumps) Update() {
-	// Stumps don't need updating unless they fall
+func (s *stumps) update() {
+	// stumps don't need updating unless they fall
 }
 
-func (s *Stumps) Draw(screen *ebiten.Image) {
+func (s *stumps) draw(screen *ebiten.Image) {
 	var currentSprite *ebiten.Image
-	if s.fallen && s.outSprite != nil {
+	if s.isFallen && s.outSprite != nil {
 		currentSprite = s.outSprite
 	} else {
 		currentSprite = s.sprite
@@ -57,42 +63,38 @@ func (s *Stumps) Draw(screen *ebiten.Image) {
 	screen.DrawImage(currentSprite, options)
 }
 
-func (s *Stumps) Collider() Rect {
+func (s *stumps) checkCollision(ball *ball, bat *bat) bool {
+	if s.isFallen {
+		return false
+	}
+
+	var ballCollided, batCollided bool
+	if ball != nil && ball.active {
+		ballCollided = ball.collidesWith(s)
+	}
+
+	if bat != nil {
+		batCollided = bat.collidesWith(s)
+	}
+
+	return ballCollided || batCollided
+}
+func (s *stumps) fall() {
+	s.logger.Debug("stumps falling")
+	s.isFallen = true
+}
+
+func (s *stumps) reset() {
+	s.logger.Debug("stumps reset")
+	s.isFallen = false
+}
+
+func (s *stumps) getBounds() geometry.Rect {
 	bounds := s.sprite.Bounds()
-	return NewRect(
+	return geometry.NewRect(
 		s.position.X,
 		s.position.Y,
 		float64(bounds.Dx()),
 		float64(bounds.Dy()),
 	)
-}
-
-func (s *Stumps) CheckCollision(ball *Ball, bat *Bat) bool {
-	if s.fallen {
-		return false
-	}
-
-	var ballCollided, batCollided bool
-	if ball != nil && ball.IsActive() {
-		ballCollided = ball.Collider().Intersects(s.Collider())
-	}
-
-	if bat != nil {
-		batCollided = bat.Collider().Intersects(s.Collider())
-	}
-
-	return ballCollided || batCollided
-}
-func (s *Stumps) Fall() {
-	s.logger.Debug("stumps falling")
-	s.fallen = true
-}
-
-func (s *Stumps) IsFallen() bool {
-	return s.fallen
-}
-
-func (s *Stumps) Reset() {
-	s.logger.Debug("stumps reset")
-	s.fallen = false
 }

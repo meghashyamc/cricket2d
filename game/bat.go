@@ -5,90 +5,72 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/meghashyamc/cricket2d/assets"
+	"github.com/meghashyamc/cricket2d/geometry"
 	"github.com/meghashyamc/cricket2d/logger"
 )
 
 const (
-	maxSwingAngle = math.Pi / 3 // 60 degrees maximum swing
-	batLength     = 100.0       // Length of the bat for physics calculations
+	maxSwingAngle          = math.Pi / 3 // 60 degrees maximum swing
+	initialbatX            = 200
+	initialbatY            = 500
+	batMouseHistoryLimit   = 10  // Mouse history for calculating velocity
+	batSpeedLimitingFactor = 0.3 // How fast the bat follows the mouse
 )
 
-type Bat struct {
-	position      Vector // Position of bat handle (pivot point)
+type bat struct {
+	position      geometry.Vector // Position of bat handle (pivot point)
 	sprite        *ebiten.Image
-	currentAngle  float64  // Current rotation angle (0 = vertical)
-	previousAngle float64  // Previous frame angle for velocity calculation
-	swingVelocity float64  // Angular velocity
-	lastMousePos  Vector   // Last mouse position
-	mouseHistory  []Vector // Mouse history for calculating velocity
+	currentAngle  float64         // Current rotation angle (0 = vertical)
+	previousAngle float64         // Previous frame angle for velocity calculation
+	lastMousePos  geometry.Vector // Last mouse position
+	mouseHistory  []geometry.Vector
 	logger        logger.Logger
 }
 
-func NewBat() *Bat {
+func newBat() *bat {
 	sprite := assets.BatSprite
-	bounds := sprite.Bounds()
 
-	// Position bat in the middle-left area (between stumps and right side)
-	// Align with stumps height
-	pos := Vector{
-		X: 200,                                               // Between stumps (at ~50) and ball spawn area
-		Y: float64(screenHeight) - float64(bounds.Dy()) - 80, // Same height as stumps
+	position := geometry.Vector{
+		X: initialbatX,
+		Y: initialbatY,
 	}
 
-	bat := &Bat{
-		position:      pos,
+	bat := &bat{
+		position:      position,
 		sprite:        sprite,
 		currentAngle:  0, // Start vertical
 		previousAngle: 0,
-		swingVelocity: 0,
-		lastMousePos:  Vector{0, 0},
-		mouseHistory:  make([]Vector, 0, 10), // Keep last 10 positions for velocity calc
+		lastMousePos:  geometry.Vector{0, 0},
+		mouseHistory:  make([]geometry.Vector, 0, batMouseHistoryLimit), // Keep last 10 positions for velocity calc
 		logger:        logger.New(),
 	}
 
-	bat.logger.Debug("bat created", "position", bat.position, "maxSwingAngle", maxSwingAngle)
+	bat.logger.Debug("bat created", "position", bat.position, "max_swing_angle", maxSwingAngle)
 	return bat
 }
 
-func (b *Bat) Update() {
-	// Get current mouse position
-	mouseX, mouseY := ebiten.CursorPosition()
-	currentMousePos := Vector{X: float64(mouseX), Y: float64(mouseY)}
+func (b *bat) update() {
 
+	currentMousePosition := getCurrentMousePosition()
 	// Update mouse history
-	b.mouseHistory = append(b.mouseHistory, currentMousePos)
+	b.mouseHistory = append(b.mouseHistory, *currentMousePosition)
 	if len(b.mouseHistory) > 10 {
 		b.mouseHistory = b.mouseHistory[1:]
 	}
 
-	// Calculate desired angle based on mouse position relative to bat handle
-	deltaX := currentMousePos.X - b.position.X
-	deltaY := currentMousePos.Y - b.position.Y
+	targetAngle := b.getNewTargetAngle(currentMousePosition)
 
-	// Calculate angle from vertical (0 = vertical, positive = clockwise)
-	targetAngle := math.Atan2(-deltaX, math.Abs(deltaY)) // Note: -deltaY because Y increases downward
+	targetAngle = clampValue(targetAngle, -maxSwingAngle, maxSwingAngle)
 
-	// Clamp angle to maximum swing range
-	if targetAngle > maxSwingAngle {
-		targetAngle = maxSwingAngle
-	} else if targetAngle < -maxSwingAngle {
-		targetAngle = -maxSwingAngle
-	}
-
-	// Store previous angle for velocity calculation
+	// Store previous angle for swing velocity calculation (needed when bat hits ball)
 	b.previousAngle = b.currentAngle
 
-	// Smoothly interpolate to target angle (makes bat movement feel more natural)
-	angleSpeed := 0.3 // How fast the bat follows the mouse
-	b.currentAngle += (targetAngle - b.currentAngle) * angleSpeed
+	b.currentAngle += (targetAngle - b.currentAngle) * batSpeedLimitingFactor
 
-	// Calculate swing velocity (angular velocity)
-	b.swingVelocity = b.currentAngle - b.previousAngle
-
-	b.lastMousePos = currentMousePos
+	b.lastMousePos = *currentMousePosition
 }
 
-func (b *Bat) Draw(screen *ebiten.Image) {
+func (b *bat) draw(screen *ebiten.Image) {
 	op := &ebiten.DrawImageOptions{}
 
 	// Get sprite bounds for centering rotation
@@ -101,15 +83,20 @@ func (b *Bat) Draw(screen *ebiten.Image) {
 	op.GeoM.Translate(b.position.X, b.position.Y)
 
 	// Add slight glow effect when swinging fast
-	if math.Abs(b.swingVelocity) > 0.05 {
-		intensity := float32(math.Min(1.2, 1.0+math.Abs(b.swingVelocity)*5))
+	if math.Abs(b.currentAngle-b.previousAngle) > 0.05 {
+		intensity := float32(math.Min(1.2, 1.0+math.Abs(b.currentAngle-b.previousAngle)*5))
 		op.ColorScale.Scale(intensity, intensity, intensity, 1.0)
 	}
 
 	screen.DrawImage(b.sprite, op)
 }
 
-func (b *Bat) Collider() Rect {
+func (b *bat) collidesWith(s *stumps) bool {
+
+	return b.getBounds().Intersects(s.getBounds())
+}
+
+func (b *bat) getBounds() geometry.Rect {
 	// Create a more accurate collision rectangle that represents the rotated bat
 	bounds := b.sprite.Bounds()
 	batWidth := float64(bounds.Dx())
@@ -120,7 +107,7 @@ func (b *Bat) Collider() Rect {
 	halfWidth := batWidth / 2
 
 	// Original corners (before rotation)
-	corners := []Vector{
+	corners := []geometry.Vector{
 		{-halfWidth, 0},         // Top-left
 		{halfWidth, 0},          // Top-right
 		{halfWidth, batHeight},  // Bottom-right
@@ -128,14 +115,14 @@ func (b *Bat) Collider() Rect {
 	}
 
 	// Rotate each corner and translate to bat position
-	rotatedCorners := make([]Vector, 4)
+	rotatedCorners := make([]geometry.Vector, 4)
 	for i, corner := range corners {
 		// Rotate the corner
 		rotatedX := corner.X*math.Cos(b.currentAngle) - corner.Y*math.Sin(b.currentAngle)
 		rotatedY := corner.X*math.Sin(b.currentAngle) + corner.Y*math.Cos(b.currentAngle)
 
 		// Translate to bat position
-		rotatedCorners[i] = Vector{
+		rotatedCorners[i] = geometry.Vector{
 			X: b.position.X + rotatedX,
 			Y: b.position.Y + rotatedY,
 		}
@@ -162,17 +149,17 @@ func (b *Bat) Collider() Rect {
 		}
 	}
 
-	return NewRect(minX, minY, maxX-minX, maxY-minY)
+	return geometry.NewRect(minX, minY, maxX-minX, maxY-minY)
 }
 
-// CheckBallCollision performs precise collision detection between bat and ball
-func (b *Bat) CheckBallCollision(ball *Ball) bool {
-	ballRect := ball.Collider()
-	ballCenter := Vector{
-		X: ballRect.X + ballRect.Width/2,
-		Y: ballRect.Y + ballRect.Height/2,
+// CheckballCollision performs precise collision detection between bat and ball
+func (b *bat) checkCollision(ball *ball) bool {
+	ballBounds := ball.getBounds()
+	ballCenter := geometry.Vector{
+		X: ballBounds.X + ballBounds.Width/2,
+		Y: ballBounds.Y + ballBounds.Height/2,
 	}
-	ballRadius := math.Min(ballRect.Width, ballRect.Height) / 2
+	ballRadius := math.Min(ballBounds.Width, ballBounds.Height) / 2
 
 	// Get bat dimensions
 	bounds := b.sprite.Bounds()
@@ -184,11 +171,11 @@ func (b *Bat) CheckBallCollision(ball *Ball) bool {
 	endOffset := batHeight * 0.95   // End 90% down the bat
 
 	// Calculate start and end points of the bat hitting line
-	batStart := Vector{
+	batStart := geometry.Vector{
 		X: b.position.X + math.Sin(-b.currentAngle)*startOffset,
 		Y: b.position.Y + math.Cos(-b.currentAngle)*startOffset,
 	}
-	batEnd := Vector{
+	batEnd := geometry.Vector{
 		X: b.position.X + math.Sin(-b.currentAngle)*endOffset,
 		Y: b.position.Y + math.Cos(-b.currentAngle)*endOffset,
 	}
@@ -204,43 +191,40 @@ func (b *Bat) CheckBallCollision(ball *Ball) bool {
 
 }
 
+func (b *bat) getNewTargetAngle(currentMousePosition *geometry.Vector) float64 {
+	deltaX := currentMousePosition.X - b.position.X
+	deltaY := currentMousePosition.Y - b.position.Y
+
+	// Calculate angle from vertical (0 = vertical, positive = clockwise)
+	return math.Atan2(-deltaX, math.Abs(deltaY))
+}
+
 // distancePointToLine calculates the shortest distance from a point to a line segment
-func (b *Bat) distancePointToLine(point, lineStart, lineEnd Vector) float64 {
-	// Vector from line start to end
-	lineVec := Vector{X: lineEnd.X - lineStart.X, Y: lineEnd.Y - lineStart.Y}
-	// Vector from line start to point
-	pointVec := Vector{X: point.X - lineStart.X, Y: point.Y - lineStart.Y}
+func (b *bat) distancePointToLine(point, lineStart, lineEnd geometry.Vector) float64 {
+	// geometry.Vector from line start to end
+	lineVec := geometry.Vector{X: lineEnd.X - lineStart.X, Y: lineEnd.Y - lineStart.Y}
+	// geometry.Vector from line start to point
+	pointVec := geometry.Vector{X: point.X - lineStart.X, Y: point.Y - lineStart.Y}
 	return pointVec.Magnitude() * math.Sin(pointVec.AngleTo(lineVec))
 }
 
-func (b *Bat) Position() Vector {
-	return b.position
-}
-
-func (b *Bat) GetBatAngle() float64 {
-	return b.currentAngle
-}
-
-func (b *Bat) GetSwingVelocity() float64 {
-	return b.swingVelocity
-}
-
 // Calculate the velocity of the bat tip for more realistic ball deflection
-func (b *Bat) GetBatTipVelocity() Vector {
+func (b *bat) getbatTipVelocity() geometry.Vector {
 	// Calculate where the bat tip is
 	bounds := b.sprite.Bounds()
 	batHeight := float64(bounds.Dy())
 
+	swingVelocity := b.currentAngle - b.previousAngle
 	// Velocity is perpendicular to the bat and proportional to angular velocity
-	velocityMagnitude := math.Abs(b.swingVelocity) * batHeight * 0.8
+	velocityMagnitude := math.Abs(swingVelocity) * batHeight * 0.8
 	velocityX := -math.Cos(b.currentAngle) * velocityMagnitude
 	velocityY := math.Sin(b.currentAngle) * velocityMagnitude
 
 	// Apply sign based on swing direction
-	if b.swingVelocity < 0 {
+	if swingVelocity < 0 {
 		velocityX = -velocityX
 		velocityY = -velocityY
 	}
 
-	return Vector{X: velocityX, Y: velocityY}
+	return geometry.Vector{X: velocityX, Y: velocityY}
 }

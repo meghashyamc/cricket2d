@@ -6,47 +6,45 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/meghashyamc/cricket2d/assets"
+	"github.com/meghashyamc/cricket2d/geometry"
 	"github.com/meghashyamc/cricket2d/logger"
 )
 
 const (
-	ballSpeed          = 500.0
-	ballGravity        = 100.0 // Gravity for hit balls
+	initialballSpeed = float64(8.3)
+
+	ballGravity        = 0.03  // Downward distance moved in a tick
 	hitSpeedMultiplier = 2     // How much the bat speed affects ball speed
 	minDeflectionSpeed = 100.0 // Minimum speed after being hit
 	curveStrength      = 30.0  // How much the ball curves
 )
 
-type Ball struct {
-	position Vector
-	velocity Vector
+type ball struct {
+	position geometry.Vector
+	velocity geometry.Vector
 	sprite   *ebiten.Image
 	active   bool
-	hit      bool
-	time     float64 // Time since ball was created (for curve calculation)
+	isHit    bool
 	logger   logger.Logger
 }
 
-func NewBall() *Ball {
+func newBall(screenWidth float64, screenHeight float64) *ball {
 	sprite := assets.BallSprite
 	bounds := sprite.Bounds()
 
-	// Spawn ball at random height from horizontal middle line and above
-	midHeight := 2 * float64(screenHeight) / 3
-	startY := rand.Float64()*(midHeight-100) + 50 // From top to middle line only
-
-	ball := &Ball{
-		position: Vector{
-			X: screenWidth + float64(bounds.Dx()), // Start off-screen right
+	startY := 2 * rand.Float64() * screenHeight / 3
+	ball := &ball{
+		position: geometry.Vector{
+			X: screenWidth + float64(bounds.Dx()),
 			Y: startY,
 		},
-		velocity: Vector{
-			X: -ballSpeed / 60.0, // Move left (60 FPS)
-			Y: 0,                 // No vertical movement initially
+		velocity: geometry.Vector{
+			X: -initialballSpeed,
+			Y: 0,
 		},
 		sprite: sprite,
 		active: true,
-		hit:    false,
+		isHit:  false,
 		logger: logger.New(),
 	}
 
@@ -54,34 +52,22 @@ func NewBall() *Ball {
 	return ball
 }
 
-func (b *Ball) Update() {
+func (b *ball) update(screenWidth float64, screenHeight float64) {
 	if !b.active {
 		return
 	}
 
-	// Update time
-	b.time += 1.0 / 60.0 // Increment by frame time (assuming 60 FPS)
+	b.velocity.Y += ballGravity
 
-	// Apply gravity if ball was hit
-	b.velocity.Y += ballGravity / 3600.0 // 60 FPS squared
-
-	// Update position
 	b.position = b.position.Add(b.velocity)
 
-	// Check if ball is off screen
-	bounds := b.sprite.Bounds()
-	if b.position.Y > screenHeight+float64(bounds.Dy()) ||
-		b.position.X < -float64(bounds.Dx()) ||
-		b.position.X > screenWidth+float64(bounds.Dx()) ||
-		b.position.Y < -float64(bounds.Dy()) {
-		b.logger.Debug("ball went off screen", "position", b.position, "screenBounds", map[string]interface{}{
-			"width": screenWidth, "height": screenHeight,
-		})
+	if b.isOffScreen(screenWidth, screenHeight) {
+		b.logger.Debug("ball went off screen", "position", b.position)
 		b.active = false
 	}
 }
 
-func (b *Ball) Draw(screen *ebiten.Image) {
+func (b *ball) draw(screen *ebiten.Image) {
 	if !b.active {
 		return
 	}
@@ -90,37 +76,23 @@ func (b *Ball) Draw(screen *ebiten.Image) {
 	op.GeoM.Translate(b.position.X, b.position.Y)
 
 	// Add slight trail effect for hit balls
-	if b.hit {
+	if b.isHit {
 		op.ColorScale.Scale(1.1, 1.1, 0.9, 1.0) // Slightly yellowish
 	}
 
 	screen.DrawImage(b.sprite, op)
 }
 
-func (b *Ball) Collider() Rect {
-	bounds := b.sprite.Bounds()
-	return NewRect(
-		b.position.X,
-		b.position.Y,
-		float64(bounds.Dx()),
-		float64(bounds.Dy()),
-	)
-}
-
-func (b *Ball) IsActive() bool {
-	return b.active
-}
-
-func (b *Ball) Hit(batAngle float64, swingVelocity float64) bool {
-	if b.hit || !b.active {
+func (b *ball) hit(bat *bat) bool {
+	if b.isHit || !b.active {
 		return false
 	}
 
 	oldVelocity := b.velocity
-	b.hit = true
+	b.isHit = true
 
-	// Bat angle: 0 = vertical, positive = clockwise
-	normalAngle := batAngle + math.Pi/2
+	// bat angle: 0 = vertical, positive = clockwise
+	normalAngle := bat.currentAngle + math.Pi/2
 	normalX := math.Cos(normalAngle)
 	normalY := math.Sin(normalAngle)
 
@@ -138,7 +110,7 @@ func (b *Ball) Hit(batAngle float64, swingVelocity float64) bool {
 
 	// Calculate hit speed based on swing velocity and current ball speed
 	currentSpeed := math.Sqrt(b.velocity.X*b.velocity.X + b.velocity.Y*b.velocity.Y)
-	hitSpeed := currentSpeed + math.Abs(swingVelocity)*hitSpeedMultiplier*60.0 // Convert to pixels per frame
+	hitSpeed := currentSpeed + math.Abs(bat.currentAngle-bat.previousAngle)*hitSpeedMultiplier*60.0 // Convert to pixels per frame
 
 	// Ensure minimum speed
 	if hitSpeed < minDeflectionSpeed/60.0 {
@@ -146,7 +118,7 @@ func (b *Ball) Hit(batAngle float64, swingVelocity float64) bool {
 	}
 
 	// Set new velocity based on deflection angle and hit speed
-	b.velocity = Vector{
+	b.velocity = geometry.Vector{
 		X: -math.Cos(deflectionAngle) * hitSpeed,
 		Y: -math.Sin(deflectionAngle) * hitSpeed,
 	}
@@ -157,13 +129,37 @@ func (b *Ball) Hit(batAngle float64, swingVelocity float64) bool {
 	}
 
 	b.logger.Debug("ball hit physics calculated",
-		"batAngle", batAngle,
-		"swingVelocity", swingVelocity,
-		"deflectionAngle", deflectionAngle,
-		"hitSpeed", hitSpeed,
-		"oldVelocity", oldVelocity,
-		"newVelocity", b.velocity,
+		"bat_angle", bat.currentAngle,
+		"swing_angle", bat.currentAngle-bat.previousAngle,
+		"deflection_angle", deflectionAngle,
+		"hit_speed", hitSpeed,
+		"old_velocity", oldVelocity,
+		"new_velocity", b.velocity,
 	)
 
 	return true
+}
+
+func (b *ball) isOffScreen(screenWidth float64, screenHeight float64) bool {
+	bounds := b.sprite.Bounds()
+	return b.position.Y > screenHeight+float64(bounds.Dy()) ||
+		b.position.X < -float64(bounds.Dx()) ||
+		b.position.X > screenWidth+float64(bounds.Dx()) ||
+		b.position.Y < -float64(bounds.Dy())
+}
+
+func (b *ball) getBounds() geometry.Rect {
+	bounds := b.sprite.Bounds()
+	return geometry.NewRect(
+		b.position.X,
+		b.position.Y,
+		float64(bounds.Dx()),
+		float64(bounds.Dy()),
+	)
+}
+
+func (b *ball) collidesWith(s *stumps) bool {
+
+	// Check if the ball is within the stumps bounds
+	return b.getBounds().Intersects(s.getBounds())
 }

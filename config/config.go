@@ -42,19 +42,19 @@ func Load(env string) (*Config, error) {
 	return cfg, nil
 }
 
-func (c *Config) GetWindowWidth() int {
-	windowWidth := c.config.GetInt("WINDOW_WIDTH")
+func (c *Config) GetWindowWidth() float64 {
+	windowWidth := c.config.GetFloat64("WINDOW_WIDTH")
 	if windowWidth == 0 {
-		windowWidth = c.config.GetInt("window.width")
+		windowWidth = c.config.GetFloat64("window.width")
 	}
 
 	return windowWidth
 }
 
-func (c *Config) GetWindowHeight() int {
-	windowHeight := c.config.GetInt("WINDOW_HEIGHT")
+func (c *Config) GetWindowHeight() float64 {
+	windowHeight := c.config.GetFloat64("WINDOW_HEIGHT")
 	if windowHeight == 0 {
-		windowHeight = c.config.GetInt("window.height")
+		windowHeight = c.config.GetFloat64("window.height")
 	}
 
 	return windowHeight
@@ -87,7 +87,7 @@ func (c *Config) GetScoreFilename() string {
 	return scoreFilename
 }
 
-func (c *Config) GetBallSpawnTime() int {
+func (c *Config) GetballSpawnTime() int {
 	ballSpawnTimeSeconds := c.config.GetInt("BALL_SPAWN_TIME_SECONDS")
 	if ballSpawnTimeSeconds == 0 {
 		ballSpawnTimeSeconds = c.config.GetInt("game.ballspawntime_seconds")

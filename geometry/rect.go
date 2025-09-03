@@ -1,4 +1,4 @@
-package game
+package geometry
 
 type Rect struct {
 	X      float64
