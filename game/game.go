@@ -50,9 +50,9 @@ func NewGame(cfg *config.Config) (*Game, error) {
 
 	g := &Game{
 		cfg:              cfg,
-		bat:              Newbat(),
+		bat:              newBat(),
 		balls:            make(map[*ball]struct{}),
-		stumps:           Newstumps(float64(cfg.GetWindowHeight())),
+		stumps:           newStumps(float64(cfg.GetWindowHeight())),
 		ballSpawnTimer:   time.NewTicker(time.Duration(cfg.GetballSpawnTime()) * time.Second),
 		score:            0,
 		state:            GameStatePlaying,
@@ -129,7 +129,6 @@ func (g *Game) updateballs() {
 			continue
 		}
 
-		// Check collision with bat
 		if g.bat.checkCollision(ball) {
 			if ball.hit(g.bat) {
 				g.score++
@@ -188,7 +187,6 @@ func (g *Game) updateNameInput() error {
 }
 
 func (g *Game) endGame(message string) {
-	g.logger.Debug("game ended", "message", message, "finalScore", g.score)
 	g.userMessage = message
 	if g.highScoreManager.IsNewHighScore(g.score) {
 		g.logger.Info("new high score achieved", "score", g.score)
@@ -201,7 +199,7 @@ func (g *Game) endGame(message string) {
 
 }
 
-func (g *Game) Draw(screen *ebiten.Image) {
+func (g *Game) draw(screen *ebiten.Image) {
 	// Clear screen with black background (terminal-like)
 	screen.Fill(color.RGBA{0, 0, 0, 255})
 
@@ -216,48 +214,38 @@ func (g *Game) Draw(screen *ebiten.Image) {
 }
 
 func (g *Game) drawPlaying(screen *ebiten.Image) {
-	// Draw stumps
-	g.stumps.Draw(screen)
+	g.stumps.draw(screen)
+	g.bat.draw(screen)
 
-	// Draw bat
-	g.bat.Draw(screen)
-
-	// Draw balls
 	for ball := range g.balls {
-		ball.Draw(screen)
+		ball.draw(screen)
 	}
 
-	// Draw collision rectangles for debugging
-	g.drawCollisionRectangles(screen)
+	var (
+		scoreX float64 = 20
+		scoreY float64 = 30
+	)
 
-	// Draw current score
-	scoreText := fmt.Sprintf("Score: %d", g.score)
-	op := &text.DrawOptions{}
-	op.GeoM.Translate(20, 30)
-	op.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, scoreText, assets.ScoreFont, op)
+	var (
+		highScoreX float64 = 20
+		highScoreY float64 = 60
+	)
 
-	// Draw high score
-	highScoreText := g.highScoreManager.GetHighScoreText()
-	op2 := &text.DrawOptions{}
-	op2.GeoM.Translate(20, 60)
-	op2.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, highScoreText, assets.ScoreFont, op2)
+	var (
+		instructionX float64 = 20
+		instructionY float64 = g.cfg.GetWindowHeight() - 30
+	)
 
-	// Draw instructions
-	instructionText := "Move mouse to swing bat"
-	op3 := &text.DrawOptions{}
-	op3.GeoM.Translate(20, screenHeight-30)
-	op3.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, instructionText, assets.ScoreFont, op3)
+	g.drawScore(screen, scoreX, scoreY)
+	g.drawHighScore(screen, highScoreX, highScoreY)
+	g.drawInstruction(screen, instructionX, instructionY)
+
 }
 
 func (g *Game) drawGameOver(screen *ebiten.Image) {
-	// Draw stumps (will show out sprite if fallen)
-	g.stumps.Draw(screen)
+	g.stumps.draw(screen)
 
-	// Draw bat (keep it visible)
-	g.bat.Draw(screen)
+	g.bat.draw(screen)
 
 	// Draw OUT text in big letters towards center-right
 	outOp := &text.DrawOptions{}
@@ -323,65 +311,38 @@ func (g *Game) drawNameInput(screen *ebiten.Image) {
 	text.Draw(screen, instructionText, assets.ScoreFont, op5)
 }
 
-func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	return 1200, 800
-}
-
-func (g *Game) Reset() {
+func (g *Game) reset() {
 	g.logger.Debug("resetting game")
-	g.bat = Newbat()
+	g.bat = newBat()
 	g.balls = make(map[*ball]struct{})
-	g.stumps.Reset()
-	g.ballSpawnTimer.Reset(ballSpawnTime)
+	g.stumps.reset()
+	g.ballSpawnTimer.Reset(time.Duration(g.cfg.GetballSpawnTime()) * time.Second)
 	g.score = 0
 	g.state = GameStatePlaying
 	g.logger.Debug("game reset complete", "state", g.state)
 }
 
-func (g *Game) drawCollisionRectangles(screen *ebiten.Image) {
-	// Draw bat collision rectangle in red
-	batRect := g.bat.Collider()
-	g.drawRectangleOutline(screen, batRect, color.RGBA{255, 0, 0, 255}) // Red
+func (g *Game) drawScore(screen *ebiten.Image, posX, posY float64) {
+	scoreText := fmt.Sprintf("Score: %d", g.score)
+	op := &text.DrawOptions{}
+	op.GeoM.Translate(posX, posY)
+	op.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, scoreText, assets.ScoreFont, op)
 
-	// Draw ball collision rectangles in green
-	for ball := range g.balls {
-		if ball.IsActive() {
-			ballRect := ball.Collider()
-			g.drawRectangleOutline(screen, ballRect, color.RGBA{0, 255, 0, 255}) // Green
-		}
-	}
-
-	// Draw stumps collision rectangle in blue
-	stumpsRect := g.stumps.Collider()
-	g.drawRectangleOutline(screen, stumpsRect, color.RGBA{0, 0, 255, 255}) // Blue
 }
 
-func (g *Game) drawRectangleOutline(screen *ebiten.Image, rect Rect, col color.Color) {
-	// Create a 1-pixel white image to draw lines with
-	lineImg := ebiten.NewImage(1, 1)
-	lineImg.Fill(col)
+func (g *Game) drawHighScore(screen *ebiten.Image, posX, posY float64) {
+	highScoreText := g.highScoreManager.GetHighScoreText()
+	op2 := &text.DrawOptions{}
+	op2.GeoM.Translate(posX, posY)
+	op2.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, highScoreText, assets.ScoreFont, op2)
+}
 
-	// Draw top line
-	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Scale(rect.Width, 1)
-	op.GeoM.Translate(rect.X, rect.Y)
-	screen.DrawImage(lineImg, op)
-
-	// Draw bottom line
-	op = &ebiten.DrawImageOptions{}
-	op.GeoM.Scale(rect.Width, 1)
-	op.GeoM.Translate(rect.X, rect.Y+rect.Height-1)
-	screen.DrawImage(lineImg, op)
-
-	// Draw left line
-	op = &ebiten.DrawImageOptions{}
-	op.GeoM.Scale(1, rect.Height)
-	op.GeoM.Translate(rect.X, rect.Y)
-	screen.DrawImage(lineImg, op)
-
-	// Draw right line
-	op = &ebiten.DrawImageOptions{}
-	op.GeoM.Scale(1, rect.Height)
-	op.GeoM.Translate(rect.X+rect.Width-1, rect.Y)
-	screen.DrawImage(lineImg, op)
+func (g *Game) drawInstruction(screen *ebiten.Image, posX, posY float64) {
+	instructionText := "Move mouse to swing bat"
+	op3 := &text.DrawOptions{}
+	op3.GeoM.Translate(posX, posY)
+	op3.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, instructionText, assets.ScoreFont, op3)
 }

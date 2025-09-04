@@ -40,13 +40,13 @@ func NewHighScoreManager(cfg *config.Config) (*HighScoreManager, error) {
 		logger: logger,
 	}
 
-	hsm.logger.Debug("high score manager created", "filePath", scorePath)
+	hsm.logger.Debug("high score manager created", "score_path", scoreFilePath)
 	hsm.Load()
 	return hsm, nil
 }
 
 func (hsm *HighScoreManager) Load() {
-	hsm.logger.Debug("attempting to load high score", "filePath", hsm.filePath)
+	hsm.logger.Debug("attempting to load high score", "file_path", hsm.filePath)
 	data, err := os.ReadFile(hsm.filePath)
 	if err != nil {
 		// File doesn't exist or can't be read, use default values
@@ -56,7 +56,6 @@ func (hsm *HighScoreManager) Load() {
 
 	var loadedScore HighScore
 	if err := json.Unmarshal(data, &loadedScore); err != nil {
-		// Invalid JSON, use default values
 		hsm.logger.Debug("invalid JSON in high score file, using defaults", "error", err)
 		return
 	}
@@ -76,10 +75,12 @@ func (hsm *HighScoreManager) Save() error {
 	err = os.WriteFile(hsm.filePath, data, 0644)
 	if err != nil {
 		hsm.logger.Debug("failed to write high score file", "error", err)
-	} else {
-		hsm.logger.Debug("high score saved successfully", "filePath", hsm.filePath)
+		return err
 	}
-	return err
+
+	hsm.logger.Debug("high score saved successfully", "filePath", hsm.filePath)
+
+	return nil
 }
 
 func (hsm *HighScoreManager) IsNewHighScore(score int) bool {
@@ -95,16 +96,11 @@ func (hsm *HighScoreManager) SetHighScore(score int, name string) error {
 	return hsm.Save()
 }
 
-func (hsm *HighScoreManager) GetHighScore() HighScore {
-	return hsm.highScore
-}
-
 func (hsm *HighScoreManager) GetHighScoreText() string {
-	if hsm.highScore.Score == 0 {
-		return "High Score: 0"
-	}
+
+	highScorePrefix := "High Score"
 	if hsm.highScore.Name == "" {
-		return fmt.Sprintf("High Score: %d", hsm.highScore.Score)
+		return fmt.Sprintf("%s: %d", highScorePrefix, hsm.highScore.Score)
 	}
-	return fmt.Sprintf("High Score: %d (%s)", hsm.highScore.Score, hsm.highScore.Name)
+	return fmt.Sprintf("%s: %d (%s)", highScorePrefix, hsm.highScore.Score, hsm.highScore.Name)
 }

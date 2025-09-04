@@ -15,10 +15,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to load config: %s\n", err)
 		os.Exit(1)
 	}
-	g := game.NewGame(cfg)
-
+	g, err := game.NewGame(cfg)
+	if err != nil {
+		os.Exit(1)
+	}
 	if err := g.Run(); err != nil {
-		slog.Error("error running game", "error", err)
+		slog.Error("error running game", "err", err)
 		os.Exit(1)
 	}
 }

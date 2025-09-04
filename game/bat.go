@@ -152,7 +152,7 @@ func (b *bat) getBounds() geometry.Rect {
 	return geometry.NewRect(minX, minY, maxX-minX, maxY-minY)
 }
 
-// CheckballCollision performs precise collision detection between bat and ball
+// Performs precise collision detection between bat and ball
 func (b *bat) checkCollision(ball *ball) bool {
 	ballBounds := ball.getBounds()
 	ballCenter := geometry.Vector{
@@ -181,7 +181,7 @@ func (b *bat) checkCollision(ball *ball) bool {
 	}
 
 	// Check distance from ball center to bat line
-	distance := b.distancePointToLine(ballCenter, batStart, batEnd)
+	distance := geometry.DistanceFromPointToLine(ballCenter, batStart, batEnd)
 
 	if distance < 0 {
 		return false
@@ -197,15 +197,6 @@ func (b *bat) getNewTargetAngle(currentMousePosition *geometry.Vector) float64 {
 
 	// Calculate angle from vertical (0 = vertical, positive = clockwise)
 	return math.Atan2(-deltaX, math.Abs(deltaY))
-}
-
-// distancePointToLine calculates the shortest distance from a point to a line segment
-func (b *bat) distancePointToLine(point, lineStart, lineEnd geometry.Vector) float64 {
-	// geometry.Vector from line start to end
-	lineVec := geometry.Vector{X: lineEnd.X - lineStart.X, Y: lineEnd.Y - lineStart.Y}
-	// geometry.Vector from line start to point
-	pointVec := geometry.Vector{X: point.X - lineStart.X, Y: point.Y - lineStart.Y}
-	return pointVec.Magnitude() * math.Sin(pointVec.AngleTo(lineVec))
 }
 
 // Calculate the velocity of the bat tip for more realistic ball deflection
