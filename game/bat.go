@@ -40,7 +40,7 @@ func newBat() *bat {
 		sprite:        sprite,
 		currentAngle:  0, // Start vertical
 		previousAngle: 0,
-		lastMousePos:  geometry.Vector{0, 0},
+		lastMousePos:  geometry.Vector{X: 0, Y: 0},
 		mouseHistory:  make([]geometry.Vector, 0, batMouseHistoryLimit), // Keep last 10 positions for velocity calc
 		logger:        logger.New(),
 	}
@@ -197,25 +197,4 @@ func (b *bat) getNewTargetAngle(currentMousePosition *geometry.Vector) float64 {
 
 	// Calculate angle from vertical (0 = vertical, positive = clockwise)
 	return math.Atan2(-deltaX, math.Abs(deltaY))
-}
-
-// Calculate the velocity of the bat tip for more realistic ball deflection
-func (b *bat) getbatTipVelocity() geometry.Vector {
-	// Calculate where the bat tip is
-	bounds := b.sprite.Bounds()
-	batHeight := float64(bounds.Dy())
-
-	swingVelocity := b.currentAngle - b.previousAngle
-	// Velocity is perpendicular to the bat and proportional to angular velocity
-	velocityMagnitude := math.Abs(swingVelocity) * batHeight * 0.8
-	velocityX := -math.Cos(b.currentAngle) * velocityMagnitude
-	velocityY := math.Sin(b.currentAngle) * velocityMagnitude
-
-	// Apply sign based on swing direction
-	if swingVelocity < 0 {
-		velocityX = -velocityX
-		velocityY = -velocityY
-	}
-
-	return geometry.Vector{X: velocityX, Y: velocityY}
 }

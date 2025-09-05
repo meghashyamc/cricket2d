@@ -42,10 +42,6 @@ func newStumps(screenHeight float64) *stumps {
 	return stumps
 }
 
-func (s *stumps) update() {
-	// stumps don't need updating unless they fall
-}
-
 func (s *stumps) draw(screen *ebiten.Image) {
 	var currentSprite *ebiten.Image
 	if s.isFallen && s.outSprite != nil {

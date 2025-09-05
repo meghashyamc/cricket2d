@@ -13,6 +13,7 @@ func getCurrentMousePosition() *geometry.Vector {
 	return currentMousePos
 }
 
+// clampValue clamps the value between min and max if the value is < min or > max
 func clampValue[T cmp.Ordered](value T, min T, max T) T {
 	if value > max {
 		value = max

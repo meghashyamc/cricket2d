@@ -19,7 +19,6 @@ type HighScoreManager struct {
 	filePath  string
 	highScore HighScore
 	logger    logger.Logger
-	cfg       *config.Config
 }
 
 func NewHighScoreManager(cfg *config.Config) (*HighScoreManager, error) {
@@ -96,11 +95,10 @@ func (hsm *HighScoreManager) SetHighScore(score int, name string) error {
 	return hsm.Save()
 }
 
-func (hsm *HighScoreManager) GetHighScoreText() string {
+func (hsm *HighScoreManager) GetHighScoreText(prefixText string) string {
 
-	highScorePrefix := "High Score"
 	if hsm.highScore.Name == "" {
-		return fmt.Sprintf("%s: %d", highScorePrefix, hsm.highScore.Score)
+		return fmt.Sprintf("%s%d", prefixText, hsm.highScore.Score)
 	}
-	return fmt.Sprintf("%s: %d (%s)", highScorePrefix, hsm.highScore.Score, hsm.highScore.Name)
+	return fmt.Sprintf("%s%d (%s)", prefixText, hsm.highScore.Score, hsm.highScore.Name)
 }

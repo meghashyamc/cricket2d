@@ -92,6 +92,23 @@ func (g *Game) Update() error {
 	return nil
 }
 
+func (g *Game) Draw(screen *ebiten.Image) {
+	// Clear screen with black background (terminal-like)
+	screen.Fill(color.RGBA{0, 0, 0, 255})
+
+	switch g.state {
+	case GameStatePlaying:
+		g.drawPlaying(screen)
+	case GameStateGameOver:
+		g.drawGameOver(screen)
+	case GameStateNameInput:
+		g.drawNameInput(screen)
+	}
+}
+
+func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
+	return int(g.cfg.GetWindowWidth()), int(g.cfg.GetWindowHeight())
+}
 func (g *Game) updatePlaying() error {
 	g.bat.update()
 
@@ -153,7 +170,7 @@ func (g *Game) updateballs() {
 
 func (g *Game) updateGameReset() error {
 	if ebiten.IsKeyPressed(ebiten.KeyR) {
-		g.Reset()
+		g.reset()
 	}
 	return nil
 }
@@ -194,26 +211,14 @@ func (g *Game) endGame(message string) {
 		return
 	}
 
-	g.logger.Info("game over, no new high score", "score", g.score, "currentHighScore", g.highScoreManager.GetHighScore().Score)
+	g.logger.Info("game over, no new high score", "score", g.score, "current_high_score", g.highScoreManager.highScore)
 	g.state = GameStateGameOver
 
 }
 
-func (g *Game) draw(screen *ebiten.Image) {
-	// Clear screen with black background (terminal-like)
-	screen.Fill(color.RGBA{0, 0, 0, 255})
-
-	switch g.state {
-	case GameStatePlaying:
-		g.drawPlaying(screen)
-	case GameStateGameOver:
-		g.drawGameOver(screen)
-	case GameStateNameInput:
-		g.drawNameInput(screen)
-	}
-}
-
 func (g *Game) drawPlaying(screen *ebiten.Image) {
+
+	// Draw stumps, bat and ball
 	g.stumps.draw(screen)
 	g.bat.draw(screen)
 
@@ -221,12 +226,13 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 		ball.draw(screen)
 	}
 
-	var (
+	// Draw other text that shows up in the game
+	const (
 		scoreX float64 = 20
 		scoreY float64 = 30
 	)
 
-	var (
+	const (
 		highScoreX float64 = 20
 		highScoreY float64 = 60
 	)
@@ -236,79 +242,75 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 		instructionY float64 = g.cfg.GetWindowHeight() - 30
 	)
 
-	g.drawScore(screen, scoreX, scoreY)
-	g.drawHighScore(screen, highScoreX, highScoreY)
-	g.drawInstruction(screen, instructionX, instructionY)
+	g.drawText(screen, fmt.Sprintf("%s%d", "Score: ", g.score), scoreX, scoreY, 1, 1, color.White)
+	g.drawText(screen, g.highScoreManager.GetHighScoreText("High Score: "), highScoreX, highScoreY, 1, 1, color.White)
+	g.drawText(screen, "Move mouse to swing bat", instructionX, instructionY, 1, 1, color.White)
 
 }
 
 func (g *Game) drawGameOver(screen *ebiten.Image) {
 	g.stumps.draw(screen)
-
 	g.bat.draw(screen)
 
-	// Draw OUT text in big letters towards center-right
-	outOp := &text.DrawOptions{}
-	outOp.GeoM.Scale(2.0, 2.0) // Make text bigger
-	outOp.GeoM.Translate(screenWidth/2+50, screenHeight/2-100)
-	outOp.ColorScale.ScaleWithColor(color.RGBA{255, 50, 50, 255}) // Red color
-	text.Draw(screen, g.userMessage, assets.ScoreFont, outOp)
+	// Draw OUT, final score, high score and restart text
+	var (
+		outX float64 = g.cfg.GetWindowWidth()/2 + 50
+		outY float64 = g.cfg.GetWindowHeight()/2 - 100
+	)
+	var (
+		finalScoreX float64 = g.cfg.GetWindowWidth()/2 + 50
+		finalScoreY float64 = g.cfg.GetWindowHeight()/2 - 40
+	)
 
-	// Draw final score
-	scoreText := fmt.Sprintf("Final Score: %d", g.score)
-	op2 := &text.DrawOptions{}
-	op2.GeoM.Translate(screenWidth/2+50, screenHeight/2-40)
-	op2.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, scoreText, assets.ScoreFont, op2)
+	var (
+		highScoreX float64 = g.cfg.GetWindowWidth()/2 + 50
+		highScoreY float64 = g.cfg.GetWindowHeight()/2 - 10
+	)
 
-	// Draw high score
-	highScoreText := g.highScoreManager.GetHighScoreText()
-	op4 := &text.DrawOptions{}
-	op4.GeoM.Translate(screenWidth/2+50, screenHeight/2-10)
-	op4.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, highScoreText, assets.ScoreFont, op4)
+	var (
+		restartX float64 = g.cfg.GetWindowWidth()/2 + 50
+		restartY float64 = g.cfg.GetWindowHeight()/2 + 30
+	)
+	g.drawText(screen, g.userMessage, outX, outY, 2, 2, color.RGBA{255, 50, 50, 255})
+	g.drawText(screen, fmt.Sprintf("Final Score: %d", g.score), finalScoreX, finalScoreY, 1, 1, color.White)
+	g.drawText(screen, g.highScoreManager.GetHighScoreText("High Score: "), highScoreX, highScoreY, 1, 1, color.White)
+	g.drawText(screen, "Press R to restart", restartX, restartY, 1, 1, color.White)
 
-	restartText := "Press R to restart"
-	op3 := &text.DrawOptions{}
-	op3.GeoM.Translate(screenWidth/2+50, screenHeight/2+30)
-	op3.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, restartText, assets.ScoreFont, op3)
 }
 
 func (g *Game) drawNameInput(screen *ebiten.Image) {
-	// Draw congratulations message
-	congratsText := "NEW HIGH SCORE!"
-	op := &text.DrawOptions{}
-	op.GeoM.Translate(screenWidth/2-120, screenHeight/2-80)
-	op.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, congratsText, assets.ScoreFont, op)
 
-	scoreText := fmt.Sprintf("Score: %d", g.score)
-	op2 := &text.DrawOptions{}
-	op2.GeoM.Translate(screenWidth/2-60, screenHeight/2-40)
-	op2.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, scoreText, assets.ScoreFont, op2)
+	var (
+		congratsX float64 = g.cfg.GetWindowWidth()/2 - 120
+		congratsY float64 = g.cfg.GetWindowHeight()/2 - 80
+	)
 
-	// Draw name input prompt
-	promptText := "Enter your name:"
-	op3 := &text.DrawOptions{}
-	op3.GeoM.Translate(screenWidth/2-100, screenHeight/2)
-	op3.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, promptText, assets.ScoreFont, op3)
+	var (
+		scoreX float64 = g.cfg.GetWindowWidth()/2 - 60
+		scoreY float64 = g.cfg.GetWindowHeight()/2 - 40
+	)
 
-	// Draw current name input with cursor
-	nameText := "_"
-	op4 := &text.DrawOptions{}
-	op4.GeoM.Translate(screenWidth/2-100, screenHeight/2+30)
-	op4.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, nameText, assets.ScoreFont, op4)
+	var (
+		namePromptX float64 = g.cfg.GetWindowWidth()/2 - 100
+		namePromptY float64 = g.cfg.GetWindowHeight() / 2
+	)
 
-	// Draw instruction
-	instructionText := "Press Enter to confirm"
-	op5 := &text.DrawOptions{}
-	op5.GeoM.Translate(screenWidth/2-120, screenHeight/2+70)
-	op5.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, instructionText, assets.ScoreFont, op5)
+	var (
+		nameInputX float64 = g.cfg.GetWindowWidth()/2 - 100
+		nameInputY float64 = g.cfg.GetWindowHeight()/2 + 30
+	)
+
+	var (
+		confirmInstructionX float64 = g.cfg.GetWindowWidth()/2 - 120
+		confirmInstructionY float64 = g.cfg.GetWindowHeight()/2 + 70
+	)
+
+	g.drawText(screen, "NEW HIGH SCORE!", congratsX, congratsY, 1, 1, color.White)
+	g.drawText(screen, fmt.Sprintf("Score: %d", g.score), scoreX, scoreY, 1, 1, color.White)
+	g.drawText(screen, "Enter your name:", namePromptX, namePromptY, 1, 1, color.White)
+	g.drawText(screen, "_", nameInputX, nameInputY, 1, 1, color.White)
+	g.drawText(screen, "Press enter to confirm", confirmInstructionX, confirmInstructionY, 1, 1, color.White)
+
 }
 
 func (g *Game) reset() {
@@ -322,27 +324,10 @@ func (g *Game) reset() {
 	g.logger.Debug("game reset complete", "state", g.state)
 }
 
-func (g *Game) drawScore(screen *ebiten.Image, posX, posY float64) {
-	scoreText := fmt.Sprintf("Score: %d", g.score)
-	op := &text.DrawOptions{}
-	op.GeoM.Translate(posX, posY)
-	op.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, scoreText, assets.ScoreFont, op)
-
-}
-
-func (g *Game) drawHighScore(screen *ebiten.Image, posX, posY float64) {
-	highScoreText := g.highScoreManager.GetHighScoreText()
-	op2 := &text.DrawOptions{}
-	op2.GeoM.Translate(posX, posY)
-	op2.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, highScoreText, assets.ScoreFont, op2)
-}
-
-func (g *Game) drawInstruction(screen *ebiten.Image, posX, posY float64) {
-	instructionText := "Move mouse to swing bat"
-	op3 := &text.DrawOptions{}
-	op3.GeoM.Translate(posX, posY)
-	op3.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, instructionText, assets.ScoreFont, op3)
+func (g *Game) drawText(screen *ebiten.Image, textToDraw string, posX, posY, scaleX, scaleY float64, textColor color.Color) {
+	options := &text.DrawOptions{}
+	options.GeoM.Scale(scaleX, scaleY)
+	options.GeoM.Translate(posX, posY)
+	options.ColorScale.ScaleWithColor(textColor)
+	text.Draw(screen, textToDraw, assets.ScoreFont, options)
 }
