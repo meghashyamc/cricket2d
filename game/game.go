@@ -29,6 +29,10 @@ const (
 	gameEndMessageBowled    = "BOWLED!"
 )
 
+const (
+	sleepTimeBeforeShowingHighScore = 1 * time.Second
+)
+
 type Game struct {
 	cfg              *config.Config
 	bat              *bat
@@ -85,7 +89,7 @@ func (g *Game) Update() error {
 	case GameStatePlaying:
 		return g.updatePlaying()
 	case GameStateGameOver:
-		return g.updateGameReset()
+		return g.updateGameOver()
 	case GameStateNameInput:
 		return g.updateNameInput()
 	}
@@ -168,9 +172,19 @@ func (g *Game) updateballs() {
 	}
 }
 
-func (g *Game) updateGameReset() error {
+func (g *Game) updateGameOver() error {
+
+	// Reset
 	if ebiten.IsKeyPressed(ebiten.KeyR) {
 		g.reset()
+	}
+
+	// Allow user to enter high score
+	if g.highScoreManager.IsNewHighScore(g.score) {
+		time.Sleep(sleepTimeBeforeShowingHighScore)
+		g.logger.Info("new high score achieved", "score", g.score)
+		g.state = GameStateNameInput
+		return nil
 	}
 	return nil
 }
@@ -205,11 +219,6 @@ func (g *Game) updateNameInput() error {
 
 func (g *Game) endGame(message string) {
 	g.userMessage = message
-	if g.highScoreManager.IsNewHighScore(g.score) {
-		g.logger.Info("new high score achieved", "score", g.score)
-		g.state = GameStateNameInput
-		return
-	}
 
 	g.logger.Info("game over, no new high score", "score", g.score, "current_high_score", g.highScoreManager.highScore)
 	g.state = GameStateGameOver

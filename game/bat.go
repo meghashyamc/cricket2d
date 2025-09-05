@@ -12,7 +12,7 @@ import (
 const (
 	maxSwingAngle          = math.Pi / 3 // 60 degrees maximum swing
 	initialbatX            = 200
-	initialbatY            = 500
+	initialbatY            = 350
 	batMouseHistoryLimit   = 10  // Mouse history for calculating velocity
 	batSpeedLimitingFactor = 0.3 // How fast the bat follows the mouse
 )
