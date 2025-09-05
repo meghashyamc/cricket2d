@@ -44,6 +44,7 @@ type Game struct {
 	highScoreManager *HighScoreManager
 	logger           logger.Logger
 	userMessage      string
+	nameInput        string
 }
 
 func NewGame(cfg *config.Config) (*Game, error) {
@@ -89,9 +90,16 @@ func (g *Game) Update() error {
 	case GameStatePlaying:
 		return g.updatePlaying()
 	case GameStateGameOver:
-		return g.updateGameOver()
+		if g.highScoreManager.IsNewHighScore(g.score) {
+			time.Sleep(sleepTimeBeforeShowingHighScore)
+			g.logger.Info("new high score achieved", "score", g.score)
+			g.state = GameStateNameInput
+			return nil
+		}
+		return g.updateGameReset()
 	case GameStateNameInput:
-		return g.updateNameInput()
+		g.updateNameInput()
+		g.updateGameReset()
 	}
 	return nil
 }
@@ -172,35 +180,30 @@ func (g *Game) updateballs() {
 	}
 }
 
-func (g *Game) updateGameOver() error {
+func (g *Game) updateGameReset() error {
 
-	// Reset
 	if ebiten.IsKeyPressed(ebiten.KeyR) {
 		g.reset()
 	}
 
-	// Allow user to enter high score
-	if g.highScoreManager.IsNewHighScore(g.score) {
-		time.Sleep(sleepTimeBeforeShowingHighScore)
-		g.logger.Info("new high score achieved", "score", g.score)
-		g.state = GameStateNameInput
-		return nil
-	}
 	return nil
 }
 
-func (g *Game) updateNameInput() error {
-	nameInput := string(ebiten.AppendInputChars(nil))
+func (g *Game) updateNameInput() {
+	// Accumulate new input characters
+	newChars := string(ebiten.AppendInputChars(nil))
+	g.nameInput += newChars
 
 	// Handle backspace
-	if inpututil.IsKeyJustPressed(ebiten.KeyBackspace) && len(nameInput) > 0 {
-		nameInput = nameInput[:len(nameInput)-1]
+	if inpututil.IsKeyJustPressed(ebiten.KeyBackspace) && len(g.nameInput) > 0 {
+		g.nameInput = g.nameInput[:len(g.nameInput)-1]
 	}
 
 	// Handle enter to submit name
 	if inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
-		if nameInput == "" {
-			nameInput = "Anonymous"
+		finalName := g.nameInput
+		if finalName == "" {
+			finalName = "Anonymous"
 		}
 		// Clean the name (remove non-printable characters)
 		cleanName := strings.Map(func(r rune) rune {
@@ -208,13 +211,12 @@ func (g *Game) updateNameInput() error {
 				return r
 			}
 			return -1
-		}, nameInput)
+		}, finalName)
 
 		g.highScoreManager.SetHighScore(g.score, cleanName)
-		g.state = GameStateGameOver
+		g.nameInput = "High score saved!"
 	}
 
-	return nil
 }
 
 func (g *Game) endGame(message string) {
@@ -314,11 +316,17 @@ func (g *Game) drawNameInput(screen *ebiten.Image) {
 		confirmInstructionY float64 = g.cfg.GetWindowHeight()/2 + 70
 	)
 
+	var (
+		restartX float64 = g.cfg.GetWindowWidth()/2 - 100
+		restartY float64 = g.cfg.GetWindowHeight()/2 + 100
+	)
+
 	g.drawText(screen, "NEW HIGH SCORE!", congratsX, congratsY, 1, 1, color.White)
 	g.drawText(screen, fmt.Sprintf("Score: %d", g.score), scoreX, scoreY, 1, 1, color.White)
 	g.drawText(screen, "Enter your name:", namePromptX, namePromptY, 1, 1, color.White)
-	g.drawText(screen, "_", nameInputX, nameInputY, 1, 1, color.White)
+	g.drawText(screen, g.nameInput+"_", nameInputX, nameInputY, 1, 1, color.White)
 	g.drawText(screen, "Press enter to confirm", confirmInstructionX, confirmInstructionY, 1, 1, color.White)
+	g.drawText(screen, "Press R to restart", restartX, restartY, 1, 1, color.White)
 
 }
 
