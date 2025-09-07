@@ -44,7 +44,9 @@ type Game struct {
 	highScoreManager *HighScoreManager
 	logger           logger.Logger
 	userMessage      string
+	inputHighScore   chan struct{}
 	nameInput        string
+	nameInputTimer   *time.Timer
 }
 
 func NewGame(cfg *config.Config) (*Game, error) {
@@ -64,6 +66,7 @@ func NewGame(cfg *config.Config) (*Game, error) {
 		highScoreManager: highScoreManager,
 		logger:           logger.New(),
 		userMessage:      "",
+		inputHighScore:   make(chan struct{}, 1),
 	}
 
 	g.logger.Info("game initialized", "ball_spawn_time_seconds", cfg.GetballSpawnTime())
@@ -85,22 +88,19 @@ func (g *Game) setupWindow() {
 }
 
 func (g *Game) Update() error {
+	g.updateGameReset()
 
 	switch g.state {
 	case GameStatePlaying:
-		return g.updatePlaying()
+		g.updatePlaying()
+
 	case GameStateGameOver:
-		if g.highScoreManager.IsNewHighScore(g.score) {
-			time.Sleep(sleepTimeBeforeShowingHighScore)
-			g.logger.Info("new high score achieved", "score", g.score)
-			g.state = GameStateNameInput
-			return nil
-		}
-		return g.updateGameReset()
+		g.checkHighScore()
+
 	case GameStateNameInput:
 		g.updateNameInput()
-		g.updateGameReset()
 	}
+
 	return nil
 }
 
@@ -121,7 +121,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
 	return int(g.cfg.GetWindowWidth()), int(g.cfg.GetWindowHeight())
 }
-func (g *Game) updatePlaying() error {
+func (g *Game) updatePlaying() {
 	g.bat.update()
 
 	select {
@@ -137,13 +137,12 @@ func (g *Game) updatePlaying() error {
 			g.logger.Debug("bat collided with stumps", "score", g.score)
 			g.stumps.fall()
 			g.endGame(gameEndMessageHitWicket)
-			return nil
+			return
 		}
 	}
 
 	g.updateballs()
 
-	return nil
 }
 
 func (g *Game) updateballs() {
@@ -181,8 +180,7 @@ func (g *Game) updateballs() {
 }
 
 func (g *Game) updateGameReset() error {
-
-	if ebiten.IsKeyPressed(ebiten.KeyR) {
+	if ebiten.IsKeyPressed(ebiten.KeyControl) && ebiten.IsKeyPressed(ebiten.KeyR) {
 		g.reset()
 	}
 
@@ -190,6 +188,7 @@ func (g *Game) updateGameReset() error {
 }
 
 func (g *Game) updateNameInput() {
+
 	// Accumulate new input characters
 	newChars := string(ebiten.AppendInputChars(nil))
 	g.nameInput += newChars
@@ -285,7 +284,7 @@ func (g *Game) drawGameOver(screen *ebiten.Image) {
 	g.drawText(screen, g.userMessage, outX, outY, 2, 2, color.RGBA{255, 50, 50, 255})
 	g.drawText(screen, fmt.Sprintf("Final Score: %d", g.score), finalScoreX, finalScoreY, 1, 1, color.White)
 	g.drawText(screen, g.highScoreManager.GetHighScoreText("High Score: "), highScoreX, highScoreY, 1, 1, color.White)
-	g.drawText(screen, "Press R to restart", restartX, restartY, 1, 1, color.White)
+	g.drawText(screen, "Press Ctrl+R to restart", restartX, restartY, 1, 1, color.White)
 
 }
 
@@ -312,21 +311,15 @@ func (g *Game) drawNameInput(screen *ebiten.Image) {
 	)
 
 	var (
-		confirmInstructionX float64 = g.cfg.GetWindowWidth()/2 - 120
-		confirmInstructionY float64 = g.cfg.GetWindowHeight()/2 + 70
-	)
-
-	var (
 		restartX float64 = g.cfg.GetWindowWidth()/2 - 100
-		restartY float64 = g.cfg.GetWindowHeight()/2 + 100
+		restartY float64 = g.cfg.GetWindowHeight()/2 + 70
 	)
 
 	g.drawText(screen, "NEW HIGH SCORE!", congratsX, congratsY, 1, 1, color.White)
 	g.drawText(screen, fmt.Sprintf("Score: %d", g.score), scoreX, scoreY, 1, 1, color.White)
-	g.drawText(screen, "Enter your name:", namePromptX, namePromptY, 1, 1, color.White)
-	g.drawText(screen, g.nameInput+"_", nameInputX, nameInputY, 1, 1, color.White)
-	g.drawText(screen, "Press enter to confirm", confirmInstructionX, confirmInstructionY, 1, 1, color.White)
-	g.drawText(screen, "Press R to restart", restartX, restartY, 1, 1, color.White)
+	g.drawText(screen, "Enter your name and press return", namePromptX, namePromptY, 1, 1, color.White)
+	g.drawText(screen, g.nameInput, nameInputX, nameInputY, 1, 1, color.White)
+	g.drawText(screen, "Press Ctrl+R to restart", restartX, restartY, 1, 1, color.White)
 
 }
 
@@ -347,4 +340,22 @@ func (g *Game) drawText(screen *ebiten.Image, textToDraw string, posX, posY, sca
 	options.GeoM.Translate(posX, posY)
 	options.ColorScale.ScaleWithColor(textColor)
 	text.Draw(screen, textToDraw, assets.ScoreFont, options)
+}
+
+func (g *Game) checkHighScore() {
+	if g.highScoreManager.IsNewHighScore(g.score) {
+		if g.nameInputTimer == nil {
+			g.nameInputTimer = time.NewTimer(sleepTimeBeforeShowingHighScore)
+		}
+
+		select {
+		case <-g.nameInputTimer.C:
+			g.logger.Info("new high score achieved", "score", g.score)
+			g.state = GameStateNameInput
+			g.inputHighScore <- struct{}{}
+			g.nameInputTimer.Stop()
+			g.nameInputTimer = nil
+		default:
+		}
+	}
 }

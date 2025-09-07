@@ -84,7 +84,7 @@ func (hsm *HighScoreManager) Save() error {
 
 func (hsm *HighScoreManager) IsNewHighScore(score int) bool {
 	isNew := score > hsm.highScore.Score
-	hsm.logger.Debug("checking if new high score", "currentScore", score, "existingHighScore", hsm.highScore.Score, "isNewHighScore", isNew)
+	hsm.logger.Debug("checking if new high score", "currentScore", score, "existing_high_score", hsm.highScore.Score, "is_new_high_score", isNew)
 	return isNew
 }
 

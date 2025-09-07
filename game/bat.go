@@ -38,7 +38,7 @@ func newBat() *bat {
 	bat := &bat{
 		position:      position,
 		sprite:        sprite,
-		currentAngle:  0, // Start vertical
+		currentAngle:  -math.Pi / 3,
 		previousAngle: 0,
 		lastMousePos:  geometry.Vector{X: 0, Y: 0},
 		mouseHistory:  make([]geometry.Vector, 0, batMouseHistoryLimit), // Keep last 10 positions for velocity calc
