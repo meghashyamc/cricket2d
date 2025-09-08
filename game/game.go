@@ -122,7 +122,7 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 	return int(g.cfg.GetWindowWidth()), int(g.cfg.GetWindowHeight())
 }
 func (g *Game) updatePlaying() {
-	g.bat.update()
+	g.bat.update(g.stumps.position)
 
 	select {
 	// New balls should come in at regular intervals

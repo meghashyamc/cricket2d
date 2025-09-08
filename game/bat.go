@@ -15,6 +15,11 @@ const (
 	initialbatY            = 350
 	batMouseHistoryLimit   = 10  // Mouse history for calculating velocity
 	batSpeedLimitingFactor = 0.3 // How fast the bat follows the mouse
+
+	// Draggable area constraints (relative to stumps position)
+	batDragAreaRightOffset = 400 // How far right from stumps the bat can be dragged
+	batDragAreaUpOffset    = 200 // How far up from stumps the bat can be dragged
+	batDragAreaDownOffset  = 100 // How far down from stumps the bat can be dragged
 )
 
 type bat struct {
@@ -24,7 +29,13 @@ type bat struct {
 	previousAngle float64         // Previous frame angle for velocity calculation
 	lastMousePos  geometry.Vector // Last mouse position
 	mouseHistory  []geometry.Vector
-	logger        logger.Logger
+
+	// Drag functionality fields
+	isDragging     bool            // True when mouse button is held down for dragging
+	dragOffset     geometry.Vector // Offset from bat position to mouse when drag starts
+	dragStartAngle float64         // Angle when drag started (preserved during drag)
+
+	logger logger.Logger
 }
 
 func newBat() *bat {
@@ -36,38 +47,96 @@ func newBat() *bat {
 	}
 
 	bat := &bat{
-		position:      position,
-		sprite:        sprite,
-		currentAngle:  -math.Pi / 3,
-		previousAngle: 0,
-		lastMousePos:  geometry.Vector{X: 0, Y: 0},
-		mouseHistory:  make([]geometry.Vector, 0, batMouseHistoryLimit), // Keep last 10 positions for velocity calc
-		logger:        logger.New(),
+		position:       position,
+		sprite:         sprite,
+		currentAngle:   -math.Pi / 3,
+		previousAngle:  0,
+		lastMousePos:   geometry.Vector{X: 0, Y: 0},
+		mouseHistory:   make([]geometry.Vector, 0, batMouseHistoryLimit), // Keep last 10 positions for velocity calc
+		isDragging:     false,
+		dragOffset:     geometry.Vector{X: 0, Y: 0},
+		dragStartAngle: 0,
+		logger:         logger.New(),
 	}
 
 	bat.logger.Debug("bat created", "position", bat.position, "max_swing_angle", maxSwingAngle)
 	return bat
 }
 
-func (b *bat) update() {
+// constrainToDraggableArea ensures the bat position stays within the allowed draggable area
+func (b *bat) constrainToDraggableArea(position geometry.Vector, stumpsPos geometry.Vector) geometry.Vector {
+	// Define boundaries relative to stumps position
+	minX := stumpsPos.X
+	maxX := stumpsPos.X + batDragAreaRightOffset
+	minY := stumpsPos.Y - batDragAreaUpOffset
+	maxY := stumpsPos.Y + batDragAreaDownOffset
+
+	// Clamp the position within boundaries
+	constrainedX := clampValue(position.X, minX, maxX)
+	constrainedY := clampValue(position.Y, minY, maxY)
+
+	return geometry.Vector{X: constrainedX, Y: constrainedY}
+}
+
+// startDrag initializes drag mode when mouse button is first pressed
+func (b *bat) startDrag(mousePos geometry.Vector) {
+	b.isDragging = true
+	b.dragOffset = geometry.Vector{
+		X: b.position.X - mousePos.X,
+		Y: b.position.Y - mousePos.Y,
+	}
+	b.dragStartAngle = b.currentAngle
+}
+
+// updateDragPosition moves the bat during drag mode while preserving angle
+func (b *bat) updateDragPosition(mousePos geometry.Vector, stumpsPos geometry.Vector) {
+	newPosition := geometry.Vector{
+		X: mousePos.X + b.dragOffset.X,
+		Y: mousePos.Y + b.dragOffset.Y,
+	}
+
+	b.position = b.constrainToDraggableArea(newPosition, stumpsPos)
+
+	// Keep the angle constant during drag
+	b.currentAngle = b.dragStartAngle
+}
+
+func (b *bat) update(stumpsPos geometry.Vector) {
 
 	currentMousePosition := getCurrentMousePosition()
 	// Update mouse history
 	b.mouseHistory = append(b.mouseHistory, *currentMousePosition)
-	if len(b.mouseHistory) > 10 {
+	if len(b.mouseHistory) > batMouseHistoryLimit {
 		b.mouseHistory = b.mouseHistory[1:]
 	}
 
-	targetAngle := b.getNewTargetAngle(currentMousePosition)
+	// Check mouse button state for drag functionality
+	isMousePressed := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
 
-	targetAngle = clampValue(targetAngle, -maxSwingAngle, maxSwingAngle)
+	if isMousePressed && !b.isDragging {
+		// Start dragging
+		b.startDrag(*currentMousePosition)
+	}
+
+	if !isMousePressed && b.isDragging {
+		// Stop dragging
+		b.isDragging = false
+	}
 
 	// Store previous angle for swing velocity calculation (needed when bat hits ball)
 	b.previousAngle = b.currentAngle
+	b.lastMousePos = *currentMousePosition
+	if b.isDragging {
+		// In drag mode, move the bat while preserving angle
+		b.updateDragPosition(*currentMousePosition, stumpsPos)
+		return
+	}
 
+	// In normal mode: adjust bat angle based on mouse position
+	targetAngle := b.getNewTargetAngle(currentMousePosition)
+	targetAngle = clampValue(targetAngle, -maxSwingAngle, maxSwingAngle)
 	b.currentAngle += (targetAngle - b.currentAngle) * batSpeedLimitingFactor
 
-	b.lastMousePos = *currentMousePosition
 }
 
 func (b *bat) draw(screen *ebiten.Image) {
