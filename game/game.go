@@ -44,7 +44,6 @@ type Game struct {
 	highScoreManager *HighScoreManager
 	logger           logger.Logger
 	userMessage      string
-	inputHighScore   chan struct{}
 	nameInput        string
 	nameInputTimer   *time.Timer
 }
@@ -66,7 +65,6 @@ func NewGame(cfg *config.Config) (*Game, error) {
 		highScoreManager: highScoreManager,
 		logger:           logger.New(),
 		userMessage:      "",
-		inputHighScore:   make(chan struct{}, 1),
 	}
 
 	g.logger.Info("game initialized", "ball_spawn_time_seconds", cfg.GetballSpawnTime())
@@ -213,7 +211,7 @@ func (g *Game) updateNameInput() {
 		}, finalName)
 
 		g.highScoreManager.SetHighScore(g.score, cleanName)
-		g.nameInput = "High score saved!"
+		g.userMessage = "High score saved!"
 	}
 
 }
@@ -221,7 +219,7 @@ func (g *Game) updateNameInput() {
 func (g *Game) endGame(message string) {
 	g.userMessage = message
 
-	g.logger.Info("game over, no new high score", "score", g.score, "current_high_score", g.highScoreManager.highScore)
+	g.logger.Info("game over", "score", g.score, "current_high_score", g.highScoreManager.highScore)
 	g.state = GameStateGameOver
 
 }
@@ -291,12 +289,12 @@ func (g *Game) drawGameOver(screen *ebiten.Image) {
 func (g *Game) drawNameInput(screen *ebiten.Image) {
 
 	var (
-		congratsX float64 = g.cfg.GetWindowWidth()/2 - 120
+		congratsX float64 = g.cfg.GetWindowWidth()/2 - 100
 		congratsY float64 = g.cfg.GetWindowHeight()/2 - 80
 	)
 
 	var (
-		scoreX float64 = g.cfg.GetWindowWidth()/2 - 60
+		scoreX float64 = g.cfg.GetWindowWidth()/2 - 100
 		scoreY float64 = g.cfg.GetWindowHeight()/2 - 40
 	)
 
@@ -315,11 +313,17 @@ func (g *Game) drawNameInput(screen *ebiten.Image) {
 		restartY float64 = g.cfg.GetWindowHeight()/2 + 70
 	)
 
+	var (
+		userMessageX float64 = g.cfg.GetWindowWidth()/2 - 100
+		userMessageY float64 = g.cfg.GetWindowHeight()/2 + 110
+	)
+
 	g.drawText(screen, "NEW HIGH SCORE!", congratsX, congratsY, 1, 1, color.White)
 	g.drawText(screen, fmt.Sprintf("Score: %d", g.score), scoreX, scoreY, 1, 1, color.White)
 	g.drawText(screen, "Enter your name and press return", namePromptX, namePromptY, 1, 1, color.White)
 	g.drawText(screen, g.nameInput, nameInputX, nameInputY, 1, 1, color.White)
 	g.drawText(screen, "Press Ctrl+R to restart", restartX, restartY, 1, 1, color.White)
+	g.drawText(screen, g.userMessage, userMessageX, userMessageY, 1, 1, color.White)
 
 }
 
@@ -352,7 +356,6 @@ func (g *Game) checkHighScore() {
 		case <-g.nameInputTimer.C:
 			g.logger.Info("new high score achieved", "score", g.score)
 			g.state = GameStateNameInput
-			g.inputHighScore <- struct{}{}
 			g.nameInputTimer.Stop()
 			g.nameInputTimer = nil
 		default:

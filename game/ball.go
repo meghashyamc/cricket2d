@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	initialballSpeed = float64(8.3)
+	initialballSpeed = float64(20)
 
 	ballGravity        = 0.03  // Downward distance moved in a tick
 	hitSpeedMultiplier = 2     // How much the bat speed affects ball speed

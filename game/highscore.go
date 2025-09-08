@@ -83,8 +83,7 @@ func (hsm *HighScoreManager) Save() error {
 }
 
 func (hsm *HighScoreManager) IsNewHighScore(score int) bool {
-	isNew := score > hsm.highScore.Score
-	return isNew
+	return score > hsm.highScore.Score
 }
 
 func (hsm *HighScoreManager) SetHighScore(score int, name string) error {
