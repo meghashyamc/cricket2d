@@ -30,6 +30,10 @@ const (
 )
 
 const (
+	gameInstructions = "Move mouse to swing. Drag to move."
+)
+
+const (
 	sleepTimeBeforeShowingHighScore = 1 * time.Second
 )
 
@@ -252,7 +256,7 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 
 	g.drawText(screen, fmt.Sprintf("%s%d", "Score: ", g.score), scoreX, scoreY, 1, 1, color.White)
 	g.drawText(screen, g.highScoreManager.GetHighScoreText("High Score: "), highScoreX, highScoreY, 1, 1, color.White)
-	g.drawText(screen, "Move mouse to swing bat", instructionX, instructionY, 1, 1, color.White)
+	g.drawText(screen, gameInstructions, instructionX, instructionY, 1, 1, color.White)
 
 }
 

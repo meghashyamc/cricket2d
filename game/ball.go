@@ -2,7 +2,7 @@ package game
 
 import (
 	"math"
-	"math/rand"
+	"math/rand/v2"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/meghashyamc/cricket2d/assets"
@@ -11,12 +11,12 @@ import (
 )
 
 const (
-	initialballSpeed = float64(20)
+	minInitialballSpeed = float64(8)
+	maxInitialballSpeed = float64(30)
 
 	ballGravity        = 0.03  // Downward distance moved in a tick
 	hitSpeedMultiplier = 2     // How much the bat speed affects ball speed
 	minDeflectionSpeed = 100.0 // Minimum speed after being hit
-	curveStrength      = 30.0  // How much the ball curves
 )
 
 type ball struct {
@@ -33,13 +33,14 @@ func newBall(screenWidth float64, screenHeight float64) *ball {
 	bounds := sprite.Bounds()
 
 	startY := 2 * rand.Float64() * screenHeight / 3
+	initialBallSpeedX := rand.Float64()*(maxInitialballSpeed-minInitialballSpeed) + minInitialballSpeed
 	ball := &ball{
 		position: geometry.Vector{
 			X: screenWidth + float64(bounds.Dx()),
 			Y: startY,
 		},
 		velocity: geometry.Vector{
-			X: -initialballSpeed,
+			X: -initialBallSpeedX,
 			Y: 0,
 		},
 		sprite: sprite,
