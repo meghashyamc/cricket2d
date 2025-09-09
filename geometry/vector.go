@@ -1,6 +1,8 @@
 package geometry
 
-import "math"
+import (
+	"math"
+)
 
 type Vector struct {
 	X float64
@@ -10,6 +12,19 @@ type Vector struct {
 // DotProduct calculates the dot product of two vectors
 func (v Vector) DotProduct(other Vector) float64 {
 	return v.X*other.X + v.Y*other.Y
+}
+
+// reflected = incident - 2*(incident·normal)*normal
+func (v Vector) Reflect(normal Vector) Vector {
+	dotProduct := v.DotProduct(normal)
+
+	reflectedX := v.X - 2*dotProduct*normal.X
+	reflectedY := v.Y - 2*dotProduct*normal.Y
+
+	return Vector{
+		X: reflectedX,
+		Y: reflectedY,
+	}
 }
 
 // Magnitude calculates the magnitude (length) of a vector

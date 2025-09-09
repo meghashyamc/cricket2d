@@ -9,6 +9,15 @@ import (
 	"github.com/meghashyamc/cricket2d/logger"
 )
 
+// collisionZone represents which part of the bat was hit
+type collisionZone int
+
+const (
+	noCollision collisionZone = iota
+	handleZone
+	bodyZone
+)
+
 const (
 	maxSwingAngle          = math.Pi / 3 // 60 degrees maximum swing
 	initialbatX            = 200
@@ -20,6 +29,12 @@ const (
 	batDragAreaRightOffset = 400 // How far right from stumps the bat can be dragged
 	batDragAreaUpOffset    = 200 // How far up from stumps the bat can be dragged
 	batDragAreaDownOffset  = 100 // How far down from stumps the bat can be dragged
+
+	// Collision zone boundaries (as percentage of bat length)
+	handleZoneStart = 0.05 // Handle starts at the top 5%
+	handleZoneEnd   = 0.35 // Handle covers 35% of bat length
+	bodyZoneStart   = 0.35 // Body starts at 35%
+	bodyZoneEnd     = 0.95 // Body ends at 95%
 )
 
 type bat struct {
@@ -221,8 +236,15 @@ func (b *bat) getBounds() geometry.Rect {
 	return geometry.NewRect(minX, minY, maxX-minX, maxY-minY)
 }
 
-// Performs precise collision detection between bat and ball
-func (b *bat) checkCollision(ball *ball) bool {
+func (b *bat) getNormal() geometry.Vector {
+	normalAngle := b.currentAngle + math.Pi/2
+	normalX := math.Cos(normalAngle)
+	normalY := math.Sin(normalAngle)
+	return geometry.Vector{X: normalX, Y: normalY}
+}
+
+// Performs precise collision detection between bat and ball, returning collision zone
+func (b *bat) checkCollision(ball *ball) collisionZone {
 	ballBounds := ball.getBounds()
 	ballCenter := geometry.Vector{
 		X: ballBounds.X + ballBounds.Width/2,
@@ -234,12 +256,25 @@ func (b *bat) checkCollision(ball *ball) bool {
 	bounds := b.sprite.Bounds()
 	batHeight := float64(bounds.Dy())
 	batWidth := float64(bounds.Dx())
+	handleWidth := 2 * batWidth / 3
 
-	// Calculate the main hitting area of the bat (central 95% of length)
-	startOffset := batHeight * 0.05 // Start 10% from handle
-	endOffset := batHeight * 0.95   // End 90% down the bat
+	// Check handle zone first
+	if b.checkCollisionWithPortionOfBat(handleZoneStart, handleZoneEnd, batHeight, handleWidth, ballRadius, ballCenter) {
+		return handleZone
+	}
 
-	// Calculate start and end points of the bat hitting line
+	// Check body zone
+	if b.checkCollisionWithPortionOfBat(bodyZoneStart, bodyZoneEnd, batHeight, batWidth, ballRadius, ballCenter) {
+		return bodyZone
+	}
+
+	return noCollision
+}
+
+func (b *bat) checkCollisionWithPortionOfBat(startPercent, endPercent, batHeight, batWidth, ballRadius float64, ballCenter geometry.Vector) bool {
+	startOffset := batHeight * startPercent
+	endOffset := batHeight * endPercent
+
 	batStart := geometry.Vector{
 		X: b.position.X + math.Sin(-b.currentAngle)*startOffset,
 		Y: b.position.Y + math.Cos(-b.currentAngle)*startOffset,
@@ -249,15 +284,13 @@ func (b *bat) checkCollision(ball *ball) bool {
 		Y: b.position.Y + math.Cos(-b.currentAngle)*endOffset,
 	}
 
-	// Check distance from ball center to bat line
-	distance := geometry.DistanceFromPointToLine(ballCenter, batStart, batEnd)
-
-	if distance < 0 {
+	if batStart.Y > (ballCenter.Y+ballRadius) || batEnd.Y < (ballCenter.Y-ballRadius) {
 		return false
 	}
 
-	return distance <= (ballRadius + batWidth/2)
+	distance := geometry.DistanceFromPointToLine(ballCenter, batStart, batEnd)
 
+	return distance >= 0 && distance <= (ballRadius+batWidth/3)
 }
 
 func (b *bat) getNewTargetAngle(currentMousePosition *geometry.Vector) float64 {

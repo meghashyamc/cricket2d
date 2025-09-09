@@ -159,10 +159,11 @@ func (g *Game) updateballs() {
 			continue
 		}
 
-		if g.bat.checkCollision(ball) {
-			if ball.hit(g.bat) {
+		collisionZone := g.bat.checkCollision(ball)
+		if collisionZone != noCollision {
+			if ball.hit(g.bat, collisionZone) {
 				g.score++
-				g.logger.Debug("ball hit successfully", "newScore", g.score, "ballVelocity", ball.velocity)
+				g.logger.Debug("ball hit successfully", "new_score", g.score, "collision_zone", collisionZone, "ball_velocityy", ball.velocity)
 			}
 			continue
 		}

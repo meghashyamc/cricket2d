@@ -14,9 +14,10 @@ const (
 	minInitialballSpeed = float64(8)
 	maxInitialballSpeed = float64(30)
 
-	ballGravity        = 0.03  // Downward distance moved in a tick
-	hitSpeedMultiplier = 2     // How much the bat speed affects ball speed
-	minDeflectionSpeed = 100.0 // Minimum speed after being hit
+	ballGravity            = 0.03 // Downward distance moved in a tick
+	hitSpeedMultiplier     = 2    // How much the bat speed affects ball speed
+	minDeflectionSpeed     = 1.67 // Minimum speed per tick after being hit (for bat body hits)
+	minUpwardSpeedAfterHit = 0.083
 )
 
 type ball struct {
@@ -84,7 +85,7 @@ func (b *ball) draw(screen *ebiten.Image) {
 	screen.DrawImage(b.sprite, op)
 }
 
-func (b *ball) hit(bat *bat) bool {
+func (b *ball) hit(bat *bat, zone collisionZone) bool {
 	if b.isHit || !b.active {
 		return false
 	}
@@ -92,48 +93,69 @@ func (b *ball) hit(bat *bat) bool {
 	oldVelocity := b.velocity
 	b.isHit = true
 
-	// bat angle: 0 = vertical, positive = clockwise
-	normalAngle := bat.currentAngle + math.Pi/2
-	normalX := math.Cos(normalAngle)
-	normalY := math.Sin(normalAngle)
-
+	normal := bat.getNormal()
 	// Calculate reflected velocity vector
-	// Formula: reflected = incident - 2*(incident·normal)*normal
-	dotProduct := b.velocity.X*normalX + b.velocity.Y*normalY
-	reflectedX := b.velocity.X - 2*dotProduct*normalX
-	reflectedY := b.velocity.Y - 2*dotProduct*normalY
+	reflected := b.velocity.Reflect(normal)
 
 	// Calculate deflection angle from reflected vector
-	deflectionAngle := math.Atan2(reflectedY, reflectedX)
-
-	// Add some randomness for more interesting gameplay
-	deflectionAngle += (rand.Float64() - 0.5) * 0.3 // ±0.15 radians (~8.5 degrees)
+	deflectionAngle := math.Atan2(reflected.Y, reflected.X)
 
 	// Calculate hit speed based on swing velocity and current ball speed
-	currentSpeed := math.Sqrt(b.velocity.X*b.velocity.X + b.velocity.Y*b.velocity.Y)
-	hitSpeed := currentSpeed + math.Abs(bat.currentAngle-bat.previousAngle)*hitSpeedMultiplier*60.0 // Convert to pixels per frame
+	currentSpeed := b.velocity.Magnitude()
+	hitSpeed := currentSpeed + math.Abs(bat.currentAngle-bat.previousAngle)*hitSpeedMultiplier*60.0
 
-	// Ensure minimum speed
-	if hitSpeed < minDeflectionSpeed/60.0 {
-		hitSpeed = minDeflectionSpeed / 60.0
+	var (
+		// Apply different physics based on collision zone
+
+		// How randomly the ball gets deflected after a hit
+		randomnessFactor,
+		// Reduced power after hit
+		speedModifier,
+		// Add upward bias to make balls fly more realistically
+		upwardBias float64
+	)
+
+	switch zone {
+	case handleZone:
+
+		randomnessFactor = 0.6 // ±0.3 radians (~17 degrees)
+		speedModifier = 0.7
+		upwardBias = 0.33
+		// Ensure minimum speed is lower for handle hits
+		hitSpeed = clampValue(hitSpeed, minDeflectionSpeed/2, hitSpeed)
+
+	// default is BodyZone
+	default:
+		randomnessFactor = 0.3
+		speedModifier = 1.0
+		upwardBias = 0.5
+
+		hitSpeed = clampValue(hitSpeed, minDeflectionSpeed, hitSpeed)
 	}
 
-	// Set new velocity based on deflection angle and hit speed
+	// Apply randomness and speed modifier
+	deflectionAngle += (rand.Float64() - 0.5) * randomnessFactor
+	hitSpeed *= speedModifier
+
+	// Set new ball velocity based on deflection angle and hit speed
 	b.velocity = geometry.Vector{
 		X: -math.Cos(deflectionAngle) * hitSpeed,
 		Y: -math.Sin(deflectionAngle) * hitSpeed,
 	}
 
-	// Add some upward bias to make balls fly more realistically
-	if b.velocity.Y > -50.0/60.0 { // If not already going up significantly
-		b.velocity.Y -= 30.0 / 60.0 // Add upward velocity
+	// If not already going up significantly
+	if b.velocity.Y > -minUpwardSpeedAfterHit {
+		b.velocity.Y -= upwardBias
 	}
 
 	b.logger.Debug("ball hit physics calculated",
+		"collision_zone", zone,
 		"bat_angle", bat.currentAngle,
 		"swing_angle", bat.currentAngle-bat.previousAngle,
 		"deflection_angle", deflectionAngle,
 		"hit_speed", hitSpeed,
+		"speed_modifier", speedModifier,
+		"randomness_factor", randomnessFactor,
 		"old_velocity", oldVelocity,
 		"new_velocity", b.velocity,
 	)

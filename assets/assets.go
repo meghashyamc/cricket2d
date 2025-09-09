@@ -22,7 +22,7 @@ var (
 //go:embed ball.png
 var ballPNG []byte
 
-//go:embed bat1.png
+//go:embed bat.png
 var batPNG []byte
 
 //go:embed stumps.png
