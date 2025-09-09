@@ -22,6 +22,7 @@ const (
 	GameStatePlaying GameState = iota
 	GameStateGameOver
 	GameStateNameInput
+	GameStatePaused
 )
 
 const (
@@ -30,7 +31,7 @@ const (
 )
 
 const (
-	gameInstructions = "Move mouse to swing. Drag to move."
+	gameInstructions = "Move mouse to swing. Drag to move. Press P to pause."
 )
 
 const (
@@ -90,7 +91,7 @@ func (g *Game) setupWindow() {
 }
 
 func (g *Game) Update() error {
-	g.updateGameReset()
+	g.updateGameStateRequestFromUser()
 
 	switch g.state {
 	case GameStatePlaying:
@@ -101,6 +102,7 @@ func (g *Game) Update() error {
 
 	case GameStateNameInput:
 		g.updateNameInput()
+
 	}
 
 	return nil
@@ -117,6 +119,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		g.drawGameOver(screen)
 	case GameStateNameInput:
 		g.drawNameInput(screen)
+	case GameStatePaused:
+		g.drawPaused(screen)
 	}
 }
 
@@ -182,12 +186,28 @@ func (g *Game) updateballs() {
 	}
 }
 
-func (g *Game) updateGameReset() error {
+func (g *Game) updateGameStateRequestFromUser() {
+
+	// User wants to reset game
 	if ebiten.IsKeyPressed(ebiten.KeyControl) && ebiten.IsKeyPressed(ebiten.KeyR) {
 		g.reset()
+		return
 	}
 
-	return nil
+	// User wants to pause/unpause game
+	if inpututil.IsKeyJustPressed(ebiten.KeyP) {
+		if g.state == GameStatePlaying {
+			g.state = GameStatePaused
+			g.ballSpawnTimer.Stop()
+			return
+		}
+
+		if g.state == GameStatePaused {
+			g.state = GameStatePlaying
+			g.ballSpawnTimer.Reset(time.Duration(g.cfg.GetballSpawnTime()) * time.Second)
+			return
+		}
+	}
 }
 
 func (g *Game) updateNameInput() {
@@ -330,6 +350,44 @@ func (g *Game) drawNameInput(screen *ebiten.Image) {
 	g.drawText(screen, "Press Ctrl+R to restart", restartX, restartY, 1, 1, color.White)
 	g.drawText(screen, g.userMessage, userMessageX, userMessageY, 1, 1, color.White)
 
+}
+
+func (g *Game) drawPaused(screen *ebiten.Image) {
+	// Draw the current game state (stumps, bat, balls) in background
+	g.stumps.draw(screen)
+	g.bat.draw(screen)
+
+	for ball := range g.balls {
+		ball.draw(screen)
+	}
+
+	// Draw score and high score in their normal positions
+	const (
+		scoreX float64 = 20
+		scoreY float64 = 30
+	)
+
+	const (
+		highScoreX float64 = 20
+		highScoreY float64 = 60
+	)
+
+	g.drawText(screen, fmt.Sprintf("%s%d", "Score: ", g.score), scoreX, scoreY, 1, 1, color.White)
+	g.drawText(screen, g.highScoreManager.GetHighScoreText("High Score: "), highScoreX, highScoreY, 1, 1, color.White)
+
+	// Draw pause overlay in center
+	var (
+		pausedX float64 = g.cfg.GetWindowWidth()/2 - 50
+		pausedY float64 = g.cfg.GetWindowHeight()/2 - 20
+	)
+
+	var (
+		resumeX float64 = g.cfg.GetWindowWidth()/2 - 50
+		resumeY float64 = g.cfg.GetWindowHeight()/2 + 30
+	)
+
+	g.drawText(screen, "PAUSED", pausedX, pausedY, 2, 2, color.RGBA{255, 255, 0, 255})
+	g.drawText(screen, "Press P to resume", resumeX, resumeY, 1, 1, color.White)
 }
 
 func (g *Game) reset() {
